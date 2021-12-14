@@ -1,1 +1,5 @@
-# netz
+* NETZ
+
+*work in progress*
+
+emacs generic graph store
