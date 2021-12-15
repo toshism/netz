@@ -1,24 +1,26 @@
 (require 'ht)
 
-(defvar *netz-graph*)
+(defvar *netz-graph* nil)
 (defvar *netz-graph-store* (concat user-emacs-directory ".netz-graph"))
 
+;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; graph management
+;;;;;;;;;;;;;;;;;;;;;;;;
 ;; loading, saving, etc.
 
-(defun netz-init-graph ()
+(defun netz-init-graph (&rest g)
   (cond (*netz-graph* t)
 	((file-exists-p *netz-graph-store*)
 	 (netz-load-graph))
 	(t (netz-save-graph)))
   "Netz graph ready")
 
-(defun netz-load-graph ()
+(defun netz-load-graph (&rest g)
   (if (file-exists-p *netz-graph-store*)
       (setq *netz-graph* (read (netz-file-to-string *netz-graph-store*)))
     "No graph found"))
 
-(defun netz-save-graph ()
+(defun netz-save-graph (&rest g)
   (with-temp-buffer
     (unless *netz-graph*
       (setq *netz-graph*
@@ -34,7 +36,9 @@
     (insert-file-contents file)
     (buffer-string)))
 
+;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; node mangement
+;;;;;;;;;;;;;;;;;;;;;;;;
 ;; creating, adding, modifying, etc
 
 (defun netz--add-node (node graph)
@@ -71,7 +75,24 @@ add it to existing list of edges"
     (unless (member edge edges)
       (plist-put node :edges (cons edge (plist-get node :edges))))))
 
+(defun netz-delete-node (node graph)
+  (let ((nodes (car graph))
+	(edges (cadr graph))
+	(node-id (plist-get node :id))
+	(node-edges (plist-get node :edges)))
+    (ht-remove! nodes node-id)
+    (mapc (lambda (e)
+	    (ht-remove! edges e)
+	    (netz--delete-edge-from-node-edges (car (remove node-id e)) e graph)
+	    ) node-edges)))
+
+(defun netz--delete-edge-from-node-edges (node-id edge-id graph)
+  (let ((node (netz-get-node node-id graph)))
+    (plist-put node :edges (remove edge-id (plist-get node :edges)))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; edge management
+;;;;;;;;;;;;;;;;;;;;;;;;
 ;; creating, adding, modifying etc
 
 (defun netz--add-edge (edge graph)
@@ -116,7 +137,9 @@ or when dealing with multiple graphs etc."
   (with-guard
    (netz--get-edge id graph)))
 
+;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; relationships
+;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defun netz-get-node-hood (id graph)
   (let* ((source-node (netz-get-node id graph))
@@ -133,7 +156,9 @@ or when dealing with multiple graphs etc."
 	(edges (cadr graph)))
     (ht-select-keys edges edge-keys)))
 
+;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; utilities
+;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defun netz-flatten (list-of-lists)
   (delete-dups (apply #'append list-of-lists)))
