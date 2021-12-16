@@ -147,7 +147,6 @@
     (it "add 10,000 nodes and 9,999 edges"
       (dotimes (i 10000)
 	(netz-add-node-no-save `(:id ,i) *netz-graph*))
-      (expect (hash-table-count (car *netz-graph*)) :to-equal 10000)
       (dotimes (i 9999)
 	(netz-connect-nodes-no-save
 	 (netz-get-node i *netz-graph*)
@@ -155,8 +154,7 @@
 	  (+ 1 i)
 	  *netz-graph*)
 	 '(:type "R")
-	 *netz-graph*))
-      (expect (hash-table-count (cadr *netz-graph*)) :to-equal 9999))
+	 *netz-graph*)))
     (it "add 10,000 nodes and 9,999 edges; save and load"
       (dotimes (i 10000)
 	(netz-add-node-no-save `(:id ,i) *netz-graph*))
