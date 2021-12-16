@@ -43,7 +43,7 @@
 
 (defun netz--add-node (node graph)
   "low level function to update nodes hashmap"
-  (puthash (plist-get node :id) node (car graph)))
+  (ht-set! (car graph) (plist-get node :id) node))
 
 (defun netz-add-node (node graph)
   "add a `node' to the provided `graph'
@@ -117,17 +117,6 @@ This is useful when adding large numbers of edges
 or when dealing with multiple graphs etc."
   (netz--add-edge edge graph))
 
-(defun netz-connect-nodes (source target edge-params graph)
-  "add edge with `edge-params' connecting `source' and `target'"
-  (let ((nodes (car graph))
-	(edges (cadr graph))
-	(edge `(,(plist-get source :id) ,(plist-get target :id))))
-    ;; store edge id in edge value plist too, lazy but it's easier later to dump the full value
-    (with-update-cache
-     (netz-add-edge-no-save (plist-put edge-params :id edge) graph)
-     (netz-add-node-no-save (netz-add-edge-to-node target edge) graph)
-     (netz-add-node-no-save (netz-add-edge-to-node source edge) graph))))
-
 (defun netz--get-edge (id graph)
   "low level functon to get edge from graph"
   (gethash id (cadr graph)))
@@ -141,6 +130,27 @@ or when dealing with multiple graphs etc."
 ;;; relationships
 ;;;;;;;;;;;;;;;;;;;;;;;;
 
+(defun netz-connect-nodes (source target edge-params graph)
+  "add edge with `edge-params' connecting `source' and `target'"
+  (let ((nodes (car graph))
+	(edges (cadr graph))
+	(edge `(,(plist-get source :id) ,(plist-get target :id))))
+    ;; store edge id in edge value plist too, lazy but it's easier later to dump the full value
+    (with-update-cache
+     (netz-add-edge-no-save (plist-put edge-params :id edge) graph)
+     (netz-add-node-no-save (netz-add-edge-to-node target edge) graph)
+     (netz-add-node-no-save (netz-add-edge-to-node source edge) graph))))
+
+(defun netz-connect-nodes-no-save (source target edge-params graph)
+  "add edge with `edge-params' connecting `source' and `target'"
+  (let ((nodes (car graph))
+	(edges (cadr graph))
+	(edge `(,(plist-get source :id) ,(plist-get target :id))))
+    ;; store edge id in edge value plist too, lazy but it's easier later to dump the full value
+    (netz-add-edge-no-save (plist-put edge-params :id edge) graph)
+    (netz-add-node-no-save (netz-add-edge-to-node target edge) graph)
+    (netz-add-node-no-save (netz-add-edge-to-node source edge) graph)))
+
 (defun netz-get-node-hood (id graph)
   (let* ((source-node (netz-get-node id graph))
 	 (edges (netz-get-edges-hash-for-node
@@ -148,7 +158,7 @@ or when dealing with multiple graphs etc."
 		 graph))
 	 (nodes (ht-select-keys
 		 (car graph)
-		 (flatten (ht-keys edges)))))
+		 (netz-flatten (ht-keys edges)))))
     (list nodes edges)))
 
 (defun netz-get-edges-hash-for-node (node graph)
@@ -169,16 +179,18 @@ or when dealing with multiple graphs etc."
 
 (defmacro with-update-cache (&rest body)
   "manage handling checking for graph and saving etc."
-  `(progn ,(netz-loaded-graph-guard)
+  `(progn (netz-loaded-graph-guard)
 	  ,@body
-	  ,(netz-save-graph)))
+	  (netz-save-graph)))
 
 (defmacro with-guard (&rest body)
-  `(progn ,(netz-loaded-graph-guard)
+  `(progn (netz-loaded-graph-guard)
 	  ,@body))
 
 (defmacro netz (func &rest args)
   (let ((func-name (intern (concat "netz-" (symbol-name func)))))
     `(progn
-       ,(netz-loaded-graph-guard)
+       (netz-loaded-graph-guard)
        (,func-name ,@args *netz-graph*))))
+
+(provide 'netz)
