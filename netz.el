@@ -171,7 +171,8 @@ or when dealing with multiple graphs etc."
 ;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defun netz-flatten (list-of-lists)
-  (delete-dups (apply #'append list-of-lists)))
+  (let ((lcopy (copy-tree list-of-lists)))
+    (delete-dups (apply #'append lcopy))))
 
 (defun netz-loaded-graph-guard ()
   (unless *netz-graph*

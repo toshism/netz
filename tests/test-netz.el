@@ -173,4 +173,30 @@
 
       (expect (hash-table-count (car *netz-graph*)) :to-equal 10000)
       (expect (hash-table-count (cadr *netz-graph*)) :to-equal 9999)
-      (expect (netz-get-node 5555 *netz-graph*) :to-equal '(:id 5555 :edges ((5555 5556) (5554 5555)))))))
+      (expect (netz-get-node 5555 *netz-graph*) :to-equal '(:id 5555 :edges ((5555 5556) (5554 5555)))))
+    ;; just for curiosity
+    ;; (it "adds 1,000,000 nodes"
+    ;;   (dotimes (i 1000000)
+    ;; 	(netz-add-node-no-save `(:id ,i) *netz-graph*)))
+    )
+  (describe "traversal and such"
+    (before-each (netz-init-graph))
+
+    (it "get node neighbors"
+      (netz-add-node-no-save '(:id 1) *netz-graph*)
+      (netz-add-node-no-save '(:id 2) *netz-graph*)
+      (netz-add-node-no-save '(:id 3) *netz-graph*)
+      (netz-add-node-no-save '(:id 4) *netz-graph*)
+      (netz-connect-nodes-no-save (netz-get-node 1 *netz-graph*) (netz-get-node 2 *netz-graph*) '(:type "R") *netz-graph*)
+      (netz-connect-nodes-no-save (netz-get-node 3 *netz-graph*) (netz-get-node 1 *netz-graph*) '(:type "C") *netz-graph*)
+      (expect (netz-get-node 1 *netz-graph*) :to-equal '(:id 1 :edges ((3 1) (1 2))))
+      (expect (netz-get-node-hood 1 *netz-graph*) :not :to-throw)
+      (expect (netz-get-node 1 (netz-get-node-hood 1 *netz-graph*)) :to-equal '(:id 1 :edges ((3 1) (1 2))))
+      (expect (netz-get-node 2 (netz-get-node-hood 1 *netz-graph*)) :to-equal '(:id 2 :edges ((1 2))))
+      (expect (netz-get-node 3 (netz-get-node-hood 1 *netz-graph*)) :to-equal '(:id 3 :edges ((3 1))))
+      (expect (netz-get-node 4 (netz-get-node-hood 1 *netz-graph*)) :to-equal nil)
+      (expect (netz-get-edge '(1 2) (netz-get-node-hood 1 *netz-graph*)) :to-equal '(:type "R" :id (1 2)))
+      (expect (netz-get-edge '(2 1) (netz-get-node-hood 1 *netz-graph*)) :to-equal nil)
+      (expect (netz-get-edge '(1 3) (netz-get-node-hood 1 *netz-graph*)) :to-equal nil)
+      ))
+  )
