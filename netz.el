@@ -1,4 +1,5 @@
 (require 'ht)
+(require 'dash)
 
 (defvar *netz-graph* nil)
 (defvar *netz-graph-store* (concat user-emacs-directory ".netz-graph"))
@@ -158,7 +159,7 @@ or when dealing with multiple graphs etc."
 		 graph))
 	 (nodes (ht-select-keys
 		 (car graph)
-		 (netz-flatten (ht-keys edges)))))
+		 (-flatten (ht-keys edges)))))
     (list nodes edges)))
 
 (defun netz-get-edges-hash-for-node (node graph)
@@ -166,13 +167,38 @@ or when dealing with multiple graphs etc."
 	(edges (cadr graph)))
     (ht-select-keys edges edge-keys)))
 
+;; TODO this works, but surely there is a cleaner way
+(defun netz-bfs-shortest-path (source target graph)
+  (let* ((source-id (plist-get source :id))
+	 (target-id (plist-get target :id))
+	 (queue `((,source-id)))
+	 (visited nil)
+	 (result nil))
+    (catch 'found
+      (while queue
+	(let* ((path (pop queue))
+	       (node (-last-item path)))
+	  (unless (member node visited)
+	    (let ((neighbors (netz-node-neighbors (netz-get-node node graph))))
+	      (dolist (neighbor neighbors)
+		(let ((new-path path))
+		  (setq new-path (-snoc new-path neighbor))
+		  (setq queue (-snoc queue new-path))
+		  (when (equal neighbor target-id)
+		    (setq result new-path)
+		    (throw 'found result))))
+	      (setq visited (-snoc visited node)))))))))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; utilities
 ;;;;;;;;;;;;;;;;;;;;;;;;
 
-(defun netz-flatten (list-of-lists)
-  (let ((lcopy (copy-tree list-of-lists)))
-    (delete-dups (apply #'append lcopy))))
+(defun netz-node-neighbors (node)
+  (remove (plist-get node :id) (-flatten (plist-get node :edges))))
+
+;; (defun netz-flatten (list-of-lists)
+;;   (let ((lcopy (copy-tree list-of-lists)))
+;;     (delete-dups (apply #'append lcopy))))
 
 (defun netz-loaded-graph-guard ()
   (unless *netz-graph*

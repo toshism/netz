@@ -3,4 +3,5 @@
 
 (development
  (depends-on "buttercup")
- (depends-on "ht"))
+ (depends-on "ht")
+ (depends-on "dash"))
