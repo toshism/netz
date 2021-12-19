@@ -79,7 +79,15 @@
       (netz-add-edge-no-save valid-edge *netz-graph*)
       (setq *netz-graph* nil)
       (netz-load-graph)
-      (expect (netz-get-edge '(1 2) *netz-graph*) :to-equal nil)))
+      (expect (netz-get-edge '(1 2) *netz-graph*) :to-equal nil))
+    (it "netz-delete-edge deletes edges from nodes"
+      (netz-connect-nodes '(:id 1) '(:id 2) '(:type "R") *netz-graph*)
+      (expect (netz-get-node 1 *netz-graph*) :to-equal '(:id 1 :edges ((1 2))))
+      (expect (netz-get-node 2 *netz-graph*) :to-equal '(:id 2 :edges ((1 2))))
+      (netz-delete-edge '(1 2) *netz-graph*)
+      (expect (netz-get-edge '(1 2) *netz-graph*) :to-equal nil)
+      (expect (netz-get-node 1 *netz-graph*) :to-equal '(:id 1 :edges nil))
+      (expect (netz-get-node 2 *netz-graph*) :to-equal '(:id 2 :edges nil))))
 
   (describe "relationships"
     (before-each (netz-init-graph))
@@ -129,6 +137,38 @@
 
       (expect (netz-get-node 2 *netz-graph*) :to-equal '(:id 2 :edges ((2 3))))
       (expect (netz-get-node 4 *netz-graph*) :to-equal '(:id 4 :edges nil))))
+
+  (describe "utilities"
+    (before-each (netz-init-graph))
+
+    (it "gets edge property"
+      (netz-add-node '(:id 1) *netz-graph*)
+      (netz-add-node '(:id 2) *netz-graph*)
+      (netz-connect-nodes (netz-get-node 1 *netz-graph*) (netz-get-node 2 *netz-graph*) '(:type "A" :weight 2) *netz-graph*)
+      (expect (netz-get-edge-property '(1 2) :type *netz-graph*) :to-equal "A")
+      (expect (netz-get-edge-property '(1 2) :weight *netz-graph*) :to-equal 2))
+    (it "returns unique neighbor ids"
+      (netz-add-node '(:id 1) *netz-graph*)
+      (netz-add-node '(:id 2) *netz-graph*)
+      (netz-add-node '(:id 3) *netz-graph*)
+      (netz-connect-nodes (netz-get-node 1 *netz-graph*) (netz-get-node 2 *netz-graph*) '(:type "A" :weight 2) *netz-graph*)
+      (netz-connect-nodes (netz-get-node 2 *netz-graph*) (netz-get-node 1 *netz-graph*) '(:type "A" :weight 2) *netz-graph*)
+      (netz-connect-nodes (netz-get-node 1 *netz-graph*) (netz-get-node 3 *netz-graph*) '(:type "A" :weight 2) *netz-graph*)
+      (expect (netz-node-neighbors (netz-get-node 1 *netz-graph*)) :to-equal '(3 2)))
+    (it "builds new graph for node ids"
+      (netz-add-node '(:id 1) *netz-graph*)
+      (netz-add-node '(:id 2) *netz-graph*)
+      (netz-add-node '(:id 3) *netz-graph*)
+      (netz-add-node '(:id 4) *netz-graph*)
+      (netz-add-node '(:id 5) *netz-graph*)
+      (netz-connect-nodes (netz-get-node 1 *netz-graph*) (netz-get-node 2 *netz-graph*) '(:type "A" :weight 2) *netz-graph*)
+      (netz-connect-nodes (netz-get-node 2 *netz-graph*) (netz-get-node 1 *netz-graph*) '(:type "A" :weight 2) *netz-graph*)
+      (netz-connect-nodes (netz-get-node 1 *netz-graph*) (netz-get-node 3 *netz-graph*) '(:type "A" :weight 2) *netz-graph*)
+      (netz-connect-nodes (netz-get-node 2 *netz-graph*) (netz-get-node 3 *netz-graph*) '(:type "A" :weight 2) *netz-graph*)
+      (netz-connect-nodes (netz-get-node 1 *netz-graph*) (netz-get-node 4 *netz-graph*) '(:type "A" :weight 2) *netz-graph*)
+      (setq new-graph (netz-node-ids-to-graph '(1 2 4 5) *netz-graph*))
+      (expect (ht-keys (car new-graph)) :to-have-same-items-as '(1 2 4 5))
+      (expect (ht-keys (cadr new-graph)) :to-have-same-items-as '((1 2) (2 1) (1 4)))))
 
   (describe "bulk tests"
     (before-each (netz-init-graph))
@@ -199,7 +239,7 @@
       (expect (netz-get-edge '(2 1) (netz-get-node-hood 1 *netz-graph*)) :to-equal nil)
       (expect (netz-get-edge '(1 3) (netz-get-node-hood 1 *netz-graph*)) :to-equal nil)
       )
-    (it "finds shortest path"
+    (it "finds shortest undirected unweighted path"
       (netz-add-node-no-save '(:id 1) *netz-graph*)
       (netz-add-node-no-save '(:id 2) *netz-graph*)
       (netz-add-node-no-save '(:id 3) *netz-graph*)
@@ -208,6 +248,7 @@
       (netz-add-node-no-save '(:id 6) *netz-graph*)
       (netz-connect-nodes-no-save (netz-get-node 1 *netz-graph*) (netz-get-node 2 *netz-graph*) '(:type "R") *netz-graph*)
       (netz-connect-nodes-no-save (netz-get-node 2 *netz-graph*) (netz-get-node 3 *netz-graph*) '(:type "C") *netz-graph*)
+      ;; add a cycle
       (netz-connect-nodes-no-save (netz-get-node 2 *netz-graph*) (netz-get-node 1 *netz-graph*) '(:type "C") *netz-graph*)
       (netz-connect-nodes-no-save (netz-get-node 3 *netz-graph*) (netz-get-node 4 *netz-graph*) '(:type "C") *netz-graph*)
       (netz-connect-nodes-no-save (netz-get-node 2 *netz-graph*) (netz-get-node 5 *netz-graph*) '(:type "C") *netz-graph*)
@@ -215,8 +256,4 @@
       (expect (netz-bfs-shortest-path (netz-get-node 1 *netz-graph*) (netz-get-node 4 *netz-graph*) *netz-graph*) :to-equal '(1 2 3 4))
       (expect (netz-bfs-shortest-path (netz-get-node 3 *netz-graph*) (netz-get-node 5 *netz-graph*) *netz-graph*) :to-equal '(3 2 5))
       (expect (netz-bfs-shortest-path (netz-get-node 5 *netz-graph*) (netz-get-node 3 *netz-graph*) *netz-graph*) :to-equal '(5 2 3))
-      (expect (netz-bfs-shortest-path (netz-get-node 1 *netz-graph*) (netz-get-node 6 *netz-graph*) *netz-graph*) :to-equal nil)
-      )
-    )
-
-  )
+      (expect (netz-bfs-shortest-path (netz-get-node 1 *netz-graph*) (netz-get-node 6 *netz-graph*) *netz-graph*) :to-equal nil))))

@@ -127,6 +127,12 @@ or when dealing with multiple graphs etc."
   (with-guard
    (netz--get-edge id graph)))
 
+(defun netz-delete-edge (id graph)
+  "delete edge and clean up node edges"
+  (with-guard
+   (ht-remove! (cadr graph) id)
+   (netz--delete-edge-from-node-edges (car id) id graph)
+   (netz--delete-edge-from-node-edges (cadr id) id graph)))
 ;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; relationships
 ;;;;;;;;;;;;;;;;;;;;;;;;
@@ -193,8 +199,26 @@ or when dealing with multiple graphs etc."
 ;;; utilities
 ;;;;;;;;;;;;;;;;;;;;;;;;
 
+(defun netz-node-ids-to-graph (ids graph)
+  "takes a list of `ids' and returns a new graph
+containing the nodes and related edges."
+  (let ((new-graph `(,(ht-create 'equal) ,(ht-create 'equal))))
+    (dolist (node-id ids)
+      (ht-set! (car new-graph) node-id (netz-get-node node-id graph))
+      (dolist (edge-id (plist-get (netz-get-node node-id graph) :edges))
+	(when (netz--both-edges-in-node-list ids edge-id)
+	  (ht-set! (cadr new-graph) edge-id (netz-get-edge edge-id graph)))))
+    new-graph))
+
+(defun netz--both-edges-in-node-list (node-ids edge-id)
+  (and (-contains? node-ids (car edge-id)) (-contains? node-ids (cadr edge-id))))
+
+(defun netz-get-edge-property (edge-id property graph)
+  (let ((edge (netz-get-edge edge-id graph)))
+    (plist-get edge property)))
+
 (defun netz-node-neighbors (node)
-  (remove (plist-get node :id) (-flatten (plist-get node :edges))))
+  (delete-dups (remove (plist-get node :id) (-flatten (plist-get node :edges)))))
 
 ;; (defun netz-flatten (list-of-lists)
 ;;   (let ((lcopy (copy-tree list-of-lists)))
