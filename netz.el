@@ -52,7 +52,8 @@
 	graph)
     (error "File not found")))
 
-(defun netz-get-graph-from-cache (name)
+(defun netz-get-graph (name)
+  "get graph from cache"
   (ht-get *netz-graphs* name))
 
 (defun netz-file-to-string (file)
@@ -194,7 +195,7 @@ add it to existing list of edges"
   "takes a list of `ids' and returns a new graph
 containing the nodes and related edges."
   (let ((new-graph (netz-make-graph new-name))
-	(old-graph (netz-get-graph-from-cache old-graph)))
+	(old-graph (netz-get-graph old-graph)))
     (with-graph old-graph
 		(dolist (node-id ids)
 		  (netz-add-node (netz-get-node node-id old-graph) new-graph)
