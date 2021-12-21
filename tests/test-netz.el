@@ -9,9 +9,16 @@
   (after-each (setq *netz-graphs* (ht-create 'equal)))
   (after-each (setq test nil))
 
-  (describe "cache"
+  (describe "graph management"
     (it "netz-make-graph creates graph"
       (expect (netz-make-graph :test) :not :to-throw))
+    (it "supports names as string"
+      (expect (netz-make-graph "test") :not :to-throw)
+      (expect (plist-get (netz-get-graph "test") :name) :to-equal "test"))
+    (it "supports name as string in variable"
+      (setq test-name "test-name")
+      (expect (netz-make-graph test-name) :not :to-throw)
+      (expect (plist-get (netz-get-graph "test-name") :name) :to-equal "test-name"))
     (it "netz-make-graph initializes save file"
       (expect (file-exists-p (plist-get (netz-make-graph :test) :path))))
     (it "netz-make-graph creates proper graph data structure"
