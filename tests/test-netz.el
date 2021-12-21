@@ -16,9 +16,9 @@
       (expect (netz-make-graph "test") :not :to-throw)
       (expect (plist-get (netz-get-graph "test") :name) :to-equal "test"))
     (it "supports name as string in variable"
-      (setq test-name "test-name")
+      (setq test-name "test")
       (expect (netz-make-graph test-name) :not :to-throw)
-      (expect (plist-get (netz-get-graph "test-name") :name) :to-equal "test-name"))
+      (expect (plist-get (netz-get-graph "test") :name) :to-equal "test"))
     (it "netz-make-graph initializes save file"
       (expect (file-exists-p (plist-get (netz-make-graph :test) :path))))
     (it "netz-make-graph creates proper graph data structure"
