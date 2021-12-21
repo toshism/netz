@@ -5,7 +5,7 @@
 
 (describe "Netz"
   (before-all (setq *netz-graph-store* "/tmp/netz-graph-test"))
-  (after-each (delete-file "/tmp/netz-graph-test/test"))
+  (after-all (delete-file "/tmp/netz-graph-test/test"))
   (after-each (setq *netz-graphs* (ht-create 'equal)))
   (after-each (setq test nil))
 
@@ -20,7 +20,7 @@
       (expect (netz-make-graph test-name) :not :to-throw)
       (expect (plist-get (netz-get-graph "test") :name) :to-equal "test"))
     (it "netz-make-graph initializes save file"
-      (expect (file-exists-p (plist-get (netz-make-graph :test) :path))))
+      (expect (file-exists-p (plist-get (netz-make-graph :test nil t) :path))))
     (it "netz-make-graph creates proper graph data structure"
       (setq test (netz-make-graph :test))
       (expect (plist-get test :name) :to-be :test)
@@ -175,7 +175,7 @@
     (it "add, save, and load 10,000 nodes"
       (dotimes (i 10000)
 	(netz-add-node `(:id ,i) :test))
-      (setq path (netz--get-path :test))
+      (setq path (netz-get-path :test))
       (netz-save-graph :test)
       (ht-clear *netz-graphs*)
       (netz-load-graph path)
@@ -199,7 +199,7 @@
 	 '(:type "R")
 	 :test))
 
-      (setq path (netz--get-path :test))
+      (setq path (netz-get-path :test))
       (netz-save-graph :test)
       (ht-clear *netz-graphs*)
       (netz-load-graph path)
@@ -228,10 +228,17 @@
       (expect (netz-get-node 2 (netz-get-node-hood 1 :test :new)) :to-equal '(:id 2 :edges ((1 2))))
       (expect (netz-get-node 3 (netz-get-node-hood 1 :test :new)) :to-equal '(:id 3 :edges ((3 1))))
       (expect (netz-get-node 4 (netz-get-node-hood 1 :test :new)) :to-equal nil)
-      (expect (netz-get-edge '(1 2) (netz-get-node-hood 1 :test :new )) :to-equal '(:type "R" :id (1 2)))
+      (expect (netz-get-edge '(1 2) (netz-get-node-hood 1 :test :new)) :to-equal '(:type "R" :id (1 2)))
       (expect (netz-get-edge '(2 1) (netz-get-node-hood 1 :test :new)) :to-equal nil)
-      (expect (netz-get-edge '(1 3) (netz-get-node-hood 1 :test :new)) :to-equal nil)
-      )
+      (expect (netz-get-edge '(1 3) (netz-get-node-hood 1 :test :new)) :to-equal nil))
+    (it "filters node neighbors"
+      (netz-make-graph :test)
+      (netz-add-node '(:id 1) :test)
+      (netz-add-node '(:id 2) :test)
+      (netz-add-node '(:id 3) :test)
+      (netz-connect-nodes (netz-get-node 1 :test) (netz-get-node 2 :test) '(:type "A") :test)
+      (netz-connect-nodes (netz-get-node 1 :test) (netz-get-node 3 :test) '(:type "B") :test)
+      (netz-node-neighbors (netz-get-node 1 :test) ))
     (it "finds shortest undirected unweighted path"
       (netz-add-node '(:id 1) :test)
       (netz-add-node '(:id 2) :test)

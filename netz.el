@@ -14,7 +14,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;
 ;; loading, saving, etc.
 
-(defun netz--get-path (name &optional path)
+(defun netz-get-path (name &optional path)
   (let ((name (cond ((keywordp name)
 		     (symbol-name (intern (substring (symbol-name name) 1))))
 		    ((numberp name)
@@ -26,22 +26,23 @@
 	(concat *netz-graph-store* "/" name)
       path)))
 
-(defun netz-make-graph (name &optional path)
-  (let* ((path (netz--get-path name path))
+(defun netz-make-graph (name &optional path save)
+  (let* ((path (netz-get-path name path))
 	 (graph `(:name ,name
 			:path ,path
 			:nodes ,(ht-create 'equal)
 			:edges ,(ht-create 'equal))))
     (ht-set! *netz-graphs* name graph)
-    (netz-save-graph name)
-    ))
+    (when save
+      (netz-save-graph name))
+    graph))
 
 (defun netz-save-graph (graph)
   (with-graph graph
 	      (make-directory (file-name-directory (plist-get graph :path)) t)
 	      (ht-set! *netz-graphs* (plist-get graph :name) graph)
 	      (with-temp-buffer
-		(print graph (current-buffer))
+		(prin1 graph (current-buffer))
 		(write-file (plist-get graph :path) nil))
 	      graph))
 
@@ -52,9 +53,20 @@
 	graph)
     (error "File not found")))
 
+(defun netz-reload-graph (graph)
+  (with-graph graph
+	      (netz-load-graph (plist-get graph :path))))
+
 (defun netz-get-graph (name)
   "get graph from cache"
   (ht-get *netz-graphs* name))
+
+(defun netz-copy-graph (graph new-name &optional new-path)
+  (with-graph graph
+	      (let ((new-graph (netz-make-graph new-name new-path)))
+		(plist-put new-graph :nodes (netz-get-nodes graph))
+		(plist-put new-graph :edges (netz-get-edges graph))
+		new-graph)))
 
 (defun netz-file-to-string (file)
   "File to string function"
@@ -154,7 +166,6 @@ add it to existing list of edges"
 		     (nodes (ht-select-keys
 			     (netz-get-nodes graph)
 			     (delete-dups (-flatten (ht-keys edges))))))
-		;; (list nodes edges)
 		(plist-put new-graph :nodes nodes)
 		(plist-put new-graph :edges edges)
 		new-graph)))
@@ -214,45 +225,33 @@ containing the nodes and related edges."
 (defun netz-node-neighbors (node)
   (delete-dups (remove (plist-get node :id) (-flatten (plist-get node :edges)))))
 
-(defun netz-loaded-graph-guard ()
-  (unless *netz-graph*
-    (error "Netz graph not loaded")))
+(defun netz-filter-edges (k v graph)
+  (with-graph graph
+	      (ht-select (lambda (key value)
+			   (equal (plist-get value k) v))
+			 (netz-get-edges graph))))
 
-(defmacro with-update-cache (&rest body)
-  "manage handling checking for graph and saving etc."
-  `(progn (netz-loaded-graph-guard)
-	  ,@body
-	  (netz-save-graph)))
+(defun netz-filter-graph-edges (k v graph)
+  (with-graph graph
+	      (plist-put graph :edges (netz-filter-edges k v graph))
+	      graph))
 
-(defmacro with-guard (&rest body)
-  `(progn (netz-loaded-graph-guard)
-	  ,@body))
+(defun netz-filter-graph-nodes (k v graph)
+  (with-graph graph
+	      (plist-put graph :nodes (netz-filter-nodes k v graph))
+	      graph))
 
-(defmacro netz (func &rest args)
-  (let ((func-name (intern (concat "netz-" (symbol-name func)))))
-    `(progn
-       (netz-loaded-graph-guard)
-       (,func-name ,@args *netz-graph*))))
+(defun netz-filter-nodes (k v graph)
+  (with-graph graph
+	      (ht-select (lambda (key value)
+			   (equal (plist-get value k) v))
+			 (netz-get-nodes graph))))
 
 (defmacro with-graph (graph &rest body)
-  `(let ((,graph (if (not (consp ,graph))
+  `(let ((,graph (if (not (proper-list-p ,graph))
 		     (ht-get *netz-graphs* ,graph)
 		   ,graph)))
-     ,@body)
-  ;; (print graph)
-  ;; (let ((graph-name (if (consp graph)
-  ;; 			(when (stringp (car graph))
-  ;; 			  (car graph))
-  ;; 		      graph))
-  ;; 	(graph (if (consp graph)
-  ;; 		   (when (stringp (car graph))
-  ;; 		     (cadr graph))
-  ;; 		 graph)))
-  ;;   `(let ((,graph-name (if (not (consp ,graph))
-  ;; 			    (ht-get *netz-graphs* ,graph)
-  ;; 			  ,graph)))
-  ;;      ,@body))
-  )
+     ,@body))
 
 (defmacro with-nodes (graph &rest body)
   `(with-graph ,graph
