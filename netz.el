@@ -248,7 +248,7 @@ containing the nodes and related edges."
 			 (netz-get-nodes graph))))
 
 (defmacro with-graph (graph &rest body)
-  `(let ((,graph (if (not (proper-list-p ,graph))
+  `(let ((,graph (if (not (consp ,graph))
 		     (ht-get *netz-graphs* ,graph)
 		   ,graph)))
      ,@body))
