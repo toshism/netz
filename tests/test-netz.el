@@ -142,7 +142,44 @@
 
       (expect (netz-get-node 2 :test) :to-equal '(:id 2 :edges ((2 3))))
       (expect (netz-get-node 4 :test) :to-equal '(:id 4 :edges nil)))
-    )
+    (it "gets related by undirected edge properties (mutate)"
+      (netz-add-node '(:id 1) :test)
+      (netz-add-node '(:id 2) :test)
+      (netz-add-node '(:id 3) :test)
+      (netz-add-node '(:id 4) :test)
+      (netz-connect-nodes (netz-get-node 1 :test) (netz-get-node 2 :test) '(:type "A") :test)
+      (netz-connect-nodes (netz-get-node 1 :test) (netz-get-node 4 :test) '(:type "A") :test)
+      (netz-connect-nodes (netz-get-node 1 :test) (netz-get-node 3 :test) '(:type "B") :test)
+      (netz-get-related-by (netz-get-node 1 :test) :test :by '(:type "A"))
+      (expect (netz-get-node 3 :test) :to-be nil)
+      (expect (netz-get-node 1 :test) :not :to-be nil)
+      (expect (netz-get-node 2 :test) :not :to-be nil)
+      (expect (netz-get-node 4 :test) :not :to-be nil)
+      (expect (netz-get-edge '(1 3) :test) :to-be nil)
+      (expect (netz-get-edge '(1 2) :test) :not :to-be nil)
+      (expect (netz-get-edge '(1 4) :test) :not :to-be nil))
+    (it "gets related by undirected edge properties (no mutate)"
+      (netz-add-node '(:id 1) :test)
+      (netz-add-node '(:id 2) :test)
+      (netz-add-node '(:id 3) :test)
+      (netz-add-node '(:id 4) :test)
+      (netz-connect-nodes (netz-get-node 1 :test) (netz-get-node 2 :test) '(:type "A") :test)
+      (netz-connect-nodes (netz-get-node 1 :test) (netz-get-node 4 :test) '(:type "A") :test)
+      (netz-connect-nodes (netz-get-node 1 :test) (netz-get-node 3 :test) '(:type "B") :test)
+      (netz-get-related-by (netz-get-node 1 :test) :test :by '(:type "A") :new-name :test2)
+
+      ;; original graph is not mutated
+      (expect (netz-get-node 3 :test) :not :to-be nil)
+      (expect (netz-get-edge '(1 3) :test) :not :to-be nil)
+
+      ;; new graph
+      (expect (netz-get-node 3 :test2) :to-be nil)
+      (expect (netz-get-node 1 :test2) :not :to-be nil)
+      (expect (netz-get-node 2 :test2) :not :to-be nil)
+      (expect (netz-get-node 4 :test2) :not :to-be nil)
+      (expect (netz-get-edge '(1 3) :test2) :to-be nil)
+      (expect (netz-get-edge '(1 2) :test2) :not :to-be nil)
+      (expect (netz-get-edge '(1 4) :test2) :not :to-be nil)))
 
   (describe "utilities"
     (before-each (netz-make-graph :test))
@@ -268,5 +305,4 @@
       (expect (netz-bfs-shortest-path (netz-get-node 3 :test) (netz-get-node 5 :test) :test) :to-equal '(3 2 5))
       (expect (netz-bfs-shortest-path (netz-get-node 5 :test) (netz-get-node 3 :test) :test) :to-equal '(5 2 3))
       (expect (netz-bfs-shortest-path (netz-get-node 1 :test) (netz-get-node 6 :test) :test) :to-equal nil))
-    )
-  )
+    ))

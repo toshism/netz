@@ -1,3 +1,4 @@
+(require 'cl-lib)
 (require 'ht)
 (require 'dash)
 
@@ -163,13 +164,19 @@ add it to existing list of edges"
 		      (netz-add-node (netz-add-edge-to-node target edge) graph)
 		      (netz-add-node (netz-add-edge-to-node source edge) graph))))
 
-(defun netz-get-node-hood (id graph new-graph)
+;; (cl-defun netz-get-node-hood (id graph &key new-graph-name edge-filter node-filter)
+;; then use ht-reject! for filtering if new-graph-name is nil
+(defun netz-get-node-hood (id graph &optional new-graph edge-filter)
+  "edge-filter = '(key value)"
   (with-graph graph
 	      (let* ((source-node (netz-get-node id graph))
-		     (new-graph (netz-make-graph new-graph))
+		     (new-graph (if new-graph
+				    (netz-make-graph new-graph)
+				  graph))
 		     (edges (netz-get-edges-hash-for-node
 			     source-node
-			     graph))
+			     graph
+			     edge-filter))
 		     (nodes (ht-select-keys
 			     (netz-get-nodes graph)
 			     (delete-dups (-flatten (ht-keys edges))))))
@@ -177,10 +184,12 @@ add it to existing list of edges"
 		(plist-put new-graph :edges edges)
 		new-graph)))
 
-(defun netz-get-edges-hash-for-node (node graph)
+(defun netz-get-edges-hash-for-node (node graph &optional filter)
   (with-graph graph
-	      (let ((edge-keys (plist-get node :edges))
-		    (edges (netz-get-edges graph)))
+	      (let* ((edge-keys (plist-get node :edges))
+		     (edges (if filter
+				(netz-filter-edges (car filter) (cadr filter) graph)
+			      (netz-get-edges graph))))
 		(ht-select-keys edges edge-keys))))
 
 ;; TODO this works, but surely there is a cleaner way
@@ -205,6 +214,11 @@ add it to existing list of edges"
 		    (throw 'found result))))
 	      (setq visited (-snoc visited node)))))))))
 
+;; just a trial, not sure how i want this yet
+(cl-defun netz-get-related-by (node graph &key by new-name directed)
+  "return graph related to `node' by edge containing `by' properties"
+  (with-graph graph
+	      (netz-get-node-hood (plist-get node :id) graph new-name by)))
 ;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; utilities
 ;;;;;;;;;;;;;;;;;;;;;;;;
