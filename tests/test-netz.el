@@ -60,7 +60,11 @@
     (it "netz-add-edge-to-node order matters in edges"
       (netz-add-node '(:id 1 :name "one" :edges ((1 3))) :test)
       (netz-add-edge-to-node (netz-get-node 1 :test) '(3 1))
-      (expect (netz-get-node 1 :test) :to-equal '(:id 1 :name "one" :edges ((3 1) (1 3))))))
+      (expect (netz-get-node 1 :test) :to-equal '(:id 1 :name "one" :edges ((3 1) (1 3)))))
+    (it "netz-add-node merges data from node and existing node"
+      (netz-add-node '(:id 1 :name "one" :label "A") :test)
+      (netz-add-node '(:id 1 :name "two") :test)
+      (expect (netz-get-node 1 :test) :to-equal '(:id 1 :name "two" :label "A"))))
 
   (describe "edge management"
     :var ((invalid-edge '(:type "RELATED_TO"))
@@ -91,10 +95,17 @@
     (it "netz-connect-nodes creates edge"
       (netz-connect-nodes '(:id 1) '(:id 2) '(:type "R") :test)
       (expect (netz-get-edge '(1 2) :test) :to-equal '(:type "R" :id (1 2))))
+    (it "netz-connect-nodes existing nodes"
+      (netz-add-node '(:id 1) :test)
+      (netz-add-node '(:id 2) :test)
+      (expect (netz-connect-nodes (netz-get-node 1 :test) (netz-get-node 2 :test) '(:type "R") :test) :not :to-throw))
     (it "netz-connect-nodes updates node edges"
       (netz-connect-nodes '(:id 1) '(:id 2) '(:type "R") :test)
       (expect (netz-get-node 1 :test) :to-equal '(:id 1 :edges ((1 2))))
       (expect (netz-get-node 2 :test) :to-equal '(:id 2 :edges ((1 2)))))
+    (it "netz-connect-nodes handles existing edges"
+      (netz-connect-nodes '(:id 1) '(:id 2) '(:type "R") :test)
+      (expect (netz-connect-nodes '(:id 1) '(:id 2) '(:type "R") :test) :not :to-throw))
     (it "netz-connect-nodes handles adding additional edges"
       (netz-connect-nodes '(:id 3 :edges ((3 1))) '(:id 2) '(:type "R") :test)
       (expect (netz-get-node 3 :test) :to-equal '(:id 3 :edges ((3 2) (3 1)))))

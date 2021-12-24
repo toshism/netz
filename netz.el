@@ -80,10 +80,16 @@
 ;; creating, adding, modifying, etc
 
 (defun netz-add-node (node graph)
+  "Add `node' to `graph'.
+If node already exists it will be merged with new values.
+see `netz-merge-plists' for details."
   (unless (plist-get node :id)
     (error "Node must include an :id parameter"))
   (with-nodes graph
-	      (ht-set! nodes (plist-get node :id) node)
+	      (ht-set!
+	       nodes
+	       (plist-get node :id)
+	       (netz-merge-plists (netz-get-node (plist-get node :id) graph) node))
 	      graph))
 
 (defun netz-get-node (node-id graph)
@@ -98,7 +104,8 @@
   "get current edges from `node', if `edge' doesn't exist
 add it to existing list of edges"
   (let ((edges (plist-get node :edges)))
-    (unless (member edge edges)
+    (if (member edge edges)
+	node
       (plist-put node :edges (cons edge (plist-get node :edges))))))
 
 (defun netz-delete-node (node graph)
@@ -222,6 +229,21 @@ containing the nodes and related edges."
   (let ((edge (netz-get-edge edge-id graph)))
     (plist-get edge property)))
 
+;; stolen from org-mode
+(defun netz-merge-plists (&rest plists)
+  "Create a single property list from all plists in PLISTS.
+The process starts by copying the first list, and then setting properties
+from the other lists.  Settings in the last list are the most significant
+ones and overrule settings in the other lists."
+  (let ((rtn (copy-sequence (pop plists)))
+        p v ls)
+    (while plists
+      (setq ls (pop plists))
+      (while ls
+        (setq p (pop ls) v (pop ls))
+        (setq rtn (plist-put rtn p v))))
+    rtn))
+
 (defun netz-node-neighbors (node)
   (delete-dups (remove (plist-get node :id) (-flatten (plist-get node :edges)))))
 
@@ -249,14 +271,14 @@ containing the nodes and related edges."
 
 (defmacro with-graph (graph &rest body)
   `(let ((,graph (if (not (consp ,graph))
-		     (ht-get *netz-graphs* ,graph)
+		     (netz-get-graph ,graph)
 		   ,graph)))
      ,@body))
 
 (defmacro with-nodes (graph &rest body)
   `(with-graph ,graph
-	      (let ((nodes (plist-get ,graph :nodes)))
-		,@body)))
+	       (let ((nodes (plist-get ,graph :nodes)))
+		 ,@body)))
 
 (defmacro with-edges (graph &rest body)
   `(with-graph ,graph
