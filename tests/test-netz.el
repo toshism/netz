@@ -82,7 +82,7 @@
       (netz-connect-nodes '(:id 1) '(:id 2) '(:type "R") :test)
       (expect (netz-get-node 1 :test) :to-equal '(:id 1 :edges ((1 2))))
       (expect (netz-get-node 2 :test) :to-equal '(:id 2 :edges ((1 2))))
-      (netz-delete-edge '(1 2) :test)
+      (netz-delete-edge (netz-get-edge '(1 2) :test) :test)
       (expect (netz-get-edge '(1 2) :test) :to-equal nil)
       (expect (netz-get-node 1 :test) :to-equal '(:id 1 :edges nil))
       (expect (netz-get-node 2 :test) :to-equal '(:id 2 :edges nil))))
@@ -179,7 +179,25 @@
       (expect (netz-get-node 4 :test2) :not :to-be nil)
       (expect (netz-get-edge '(1 3) :test2) :to-be nil)
       (expect (netz-get-edge '(1 2) :test2) :not :to-be nil)
-      (expect (netz-get-edge '(1 4) :test2) :not :to-be nil)))
+      (expect (netz-get-edge '(1 4) :test2) :not :to-be nil))
+    (it "gets related by directed edge properties (mutate)"
+      (netz-add-node '(:id 1) :test)
+      (netz-add-node '(:id 2) :test)
+      (netz-add-node '(:id 3) :test)
+      (netz-add-node '(:id 4) :test)
+      (netz-connect-nodes (netz-get-node 1 :test) (netz-get-node 2 :test) '(:type "A") :test)
+      (netz-connect-nodes (netz-get-node 2 :test) (netz-get-node 1 :test) '(:type "A") :test)
+      (netz-connect-nodes (netz-get-node 4 :test) (netz-get-node 1 :test) '(:type "A") :test)
+      (netz-connect-nodes (netz-get-node 1 :test) (netz-get-node 3 :test) '(:type "B") :test)
+      (netz-get-related-by (netz-get-node 1 :test) :test :by '(:type "A") :directed t)
+      (expect (netz-get-node 3 :test) :to-be nil)
+      (expect (netz-get-node 1 :test) :not :to-be nil)
+      (expect (netz-get-node 2 :test) :not :to-be nil)
+      (expect (netz-get-node 4 :test) :to-be nil)
+      (expect (netz-get-edge '(1 3) :test) :to-be nil)
+      (expect (netz-get-edge '(1 2) :test) :not :to-be nil)
+      (expect (netz-get-edge '(1 4) :test) :to-be nil)
+      (expect (netz-get-edge '(2 1) :test) :to-be nil)))
 
   (describe "utilities"
     (before-each (netz-make-graph :test))
@@ -197,7 +215,11 @@
       (netz-connect-nodes (netz-get-node 1 :test) (netz-get-node 2 :test) '(:type "A" :weight 2) :test)
       (netz-connect-nodes (netz-get-node 2 :test) (netz-get-node 1 :test) '(:type "A" :weight 2) :test)
       (netz-connect-nodes (netz-get-node 1 :test) (netz-get-node 3 :test) '(:type "A" :weight 2) :test)
-      (expect (netz-node-neighbors (netz-get-node 1 :test)) :to-equal '(3 2)))
+      (expect (netz-node-neighbors (netz-get-node 1 :test)) :to-equal '(3 2))
+      ;; directed
+      (netz-connect-nodes (netz-get-node 3 :test) (netz-get-node 2 :test) '(:type "A" :weight 2) :test)
+      (expect (netz-node-neighbors (netz-get-node 3 :test) t) :to-equal '(2))
+      )
     (it "builds new graph for node ids"
       (netz-add-node '(:id 1) :test)
       (netz-add-node '(:id 2) :test)
@@ -254,12 +276,8 @@
 
       (expect (hash-table-count (netz-get-nodes :test)) :to-equal 10000)
       (expect (hash-table-count (netz-get-edges :test)) :to-equal 9999)
-      (expect (netz-get-node 5555 :test) :to-equal '(:id 5555 :edges ((5555 5556) (5554 5555)))))
-    ;; just for curiosity
-    ;; (it "adds 1,000,000 nodes"
-    ;;   (dotimes (i 1000000)
-    ;; 	(netz-add-node `(:id ,i) :test)))
-    )
+      (expect (netz-get-node 5555 :test) :to-equal '(:id 5555 :edges ((5555 5556) (5554 5555))))))
+
   (describe "traversal and such"
     (before-each (netz-make-graph :test))
 
@@ -305,4 +323,23 @@
       (expect (netz-bfs-shortest-path (netz-get-node 3 :test) (netz-get-node 5 :test) :test) :to-equal '(3 2 5))
       (expect (netz-bfs-shortest-path (netz-get-node 5 :test) (netz-get-node 3 :test) :test) :to-equal '(5 2 3))
       (expect (netz-bfs-shortest-path (netz-get-node 1 :test) (netz-get-node 6 :test) :test) :to-equal nil))
-    ))
+    (it "finds shortest directed unweighted path"
+      (netz-add-node '(:id 1) :test)
+      (netz-add-node '(:id 2) :test)
+      (netz-add-node '(:id 3) :test)
+      (netz-add-node '(:id 4) :test)
+      (netz-add-node '(:id 5) :test)
+      (netz-add-node '(:id 6) :test)
+      (netz-connect-nodes (netz-get-node 1 :test) (netz-get-node 2 :test) '(:type "R") :test)
+      (netz-connect-nodes (netz-get-node 2 :test) (netz-get-node 3 :test) '(:type "C") :test)
+      ;; add a cycle
+      (netz-connect-nodes (netz-get-node 2 :test) (netz-get-node 1 :test) '(:type "C") :test)
+      (netz-connect-nodes (netz-get-node 3 :test) (netz-get-node 4 :test) '(:type "C") :test)
+      (netz-connect-nodes (netz-get-node 2 :test) (netz-get-node 5 :test) '(:type "C") :test)
+
+      (expect (netz-bfs-shortest-path (netz-get-node 5 :test) (netz-get-node 1 :test) :test t) :to-equal nil)
+      (expect (netz-bfs-shortest-path (netz-get-node 3 :test) (netz-get-node 5 :test) :test t) :to-equal nil)
+
+      (netz-connect-nodes (netz-get-node 4 :test) (netz-get-node 2 :test) '(:type "C") :test)
+      (netz-connect-nodes (netz-get-node 5 :test) (netz-get-node 4 :test) '(:type "C") :test)
+      (expect (netz-bfs-shortest-path (netz-get-node 3 :test) (netz-get-node 5 :test) :test t) :to-equal '(3 4 2 5)))))

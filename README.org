@@ -3,3 +3,35 @@
 *work in progress*
 
 emacs generic graph store
+
+** Functions
+
+*** Graphs
+
+- netz-make-graph (name &optional path)
+- netz-save-graph (graph)
+- netz-load-graph (path)
+- netz-reload-graph (graph)
+- netz-get-graph (name)
+- netz-copy-graph (graph new-name &optional new-path)
+
+*** Nodes
+
+- netz-add-node (node graph)
+- netz-get-node (node-id graph)
+- netz-get-nodes (graph)
+- netz-delete-node (node graph)
+
+*** Edges
+
+- netz-add-edge (edge graph)
+- netz-get-edge (edge-id graph)
+- netz-get-edges (graph)
+- netz-delete-edge (edge graph)
+
+*** Relationships
+
+- netz-connect-nodes (source target edge-params graph) -- probably just make this netz-add-edge?
+- netz-get-node-hood (id graph &optional new-graph edge-filter directed)
+- netz-bfs-shortest-path (source target graph &optional directed)
+- netz-get-related-by (node graph &key by new-name directed)

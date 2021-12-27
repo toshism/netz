@@ -15,17 +15,6 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;
 ;; loading, saving, etc.
 
-(defun netz-get-path (name &optional path)
-  (let ((name (cond ((keywordp name)
-		     (symbol-name (intern (substring (symbol-name name) 1))))
-		    ((numberp name)
-		     (number-to-string name))
-		    ((stringp name)
-		     name)
-		    (t (error "Name must be a string, keyword, or number.")))))
-    (if (not path)
-	(concat *netz-graph-store* "/" name)
-      path)))
 
 (defun netz-make-graph (name &optional path save)
   (let* ((path (netz-get-path name path))
@@ -75,6 +64,18 @@
     (insert-file-contents file)
     (buffer-string)))
 
+(defun netz-get-path (name &optional path)
+  (let ((name (cond ((keywordp name)
+		     (symbol-name (intern (substring (symbol-name name) 1))))
+		    ((numberp name)
+		     (number-to-string name))
+		    ((stringp name)
+		     name)
+		    (t (error "Name must be a string, keyword, or number.")))))
+    (if (not path)
+	(concat *netz-graph-store* "/" name)
+      path)))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; node mangement
 ;;;;;;;;;;;;;;;;;;;;;;;;
@@ -101,14 +102,6 @@ see `netz-merge-plists' for details."
   (with-nodes graph
 	      nodes))
 
-(defun netz-add-edge-to-node (node edge)
-  "get current edges from `node', if `edge' doesn't exist
-add it to existing list of edges"
-  (let ((edges (plist-get node :edges)))
-    (if (member edge edges)
-	node
-      (plist-put node :edges (cons edge (plist-get node :edges))))))
-
 (defun netz-delete-node (node graph)
   (with-nodes-edges graph
 		    (let ((node-id (plist-get node :id))
@@ -119,6 +112,14 @@ add it to existing list of edges"
 			      (netz--delete-edge-from-node-edges
 			       (car (remove node-id edge)) edge graph))
 			    node-edges))))
+
+(defun netz-add-edge-to-node (node edge)
+  "get current edges from `node', if `edge' doesn't exist
+add it to existing list of edges"
+  (let ((edges (plist-get node :edges)))
+    (if (member edge edges)
+	node
+      (plist-put node :edges (cons edge (plist-get node :edges))))))
 
 (defun netz--delete-edge-from-node-edges (node-id edge-id graph)
   (with-graph graph
@@ -133,9 +134,15 @@ add it to existing list of edges"
 (defun netz-add-edge (edge graph)
   (unless (plist-get edge :id)
     (error "Edge must include an :id parameter"))
-  (with-edges graph
-	      (ht-set! edges (plist-get edge :id) edge)
-	      graph))
+  (with-graph graph
+	      (let ((edge-id (plist-get edge :id)))
+		(netz-add-node `(:id ,(car edge-id)) graph)
+		(netz-add-node `(:id ,(cadr edge-id)) graph)
+		(netz-connect-nodes
+		 (netz-get-node (car edge-id) graph)
+		 (netz-get-node (cadr edge-id) graph)
+		 edge
+		 graph))))
 
 (defun netz-get-edge (edge-id graph)
   (with-edges graph
@@ -145,12 +152,13 @@ add it to existing list of edges"
   (with-edges graph
 	      edges))
 
-(defun netz-delete-edge (id graph)
+(defun netz-delete-edge (edge graph)
   "delete edge and clean up node edges"
   (with-edges graph
-	      (ht-remove! edges id)
-	      (netz--delete-edge-from-node-edges (car id) id graph)
-	      (netz--delete-edge-from-node-edges (cadr id) id graph)))
+	      (let ((edge-id (plist-get edge :id)))
+		(ht-remove! edges edge-id)
+		(netz--delete-edge-from-node-edges (car edge-id) edge-id graph)
+		(netz--delete-edge-from-node-edges (cadr edge-id) edge-id graph))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; relationships
@@ -160,23 +168,29 @@ add it to existing list of edges"
   "add edge with `edge-params' connecting `source' and `target'"
   (with-nodes-edges graph
 		    (let ((edge `(,(plist-get source :id) ,(plist-get target :id))))
-		      (netz-add-edge (plist-put edge-params :id edge) graph)
+		      (ht-set! edges edge (plist-put edge-params :id edge))
+		      ;; (netz-add-edge (plist-put edge-params :id edge) graph)
 		      (netz-add-node (netz-add-edge-to-node target edge) graph)
 		      (netz-add-node (netz-add-edge-to-node source edge) graph))))
 
 ;; (cl-defun netz-get-node-hood (id graph &key new-graph-name edge-filter node-filter)
 ;; then use ht-reject! for filtering if new-graph-name is nil
-(defun netz-get-node-hood (id graph &optional new-graph edge-filter)
+(defun netz-get-node-hood (id graph &optional new-graph edge-filter directed)
   "edge-filter = '(key value)"
   (with-graph graph
 	      (let* ((source-node (netz-get-node id graph))
 		     (new-graph (if new-graph
 				    (netz-make-graph new-graph)
 				  graph))
-		     (edges (netz-get-edges-hash-for-node
-			     source-node
-			     graph
-			     edge-filter))
+		     (edges (if directed
+				(netz--filter-edges-directed id (netz-get-edges-hash-for-node
+								 source-node
+								 graph
+								 edge-filter))
+			      (netz-get-edges-hash-for-node
+			       source-node
+			       graph
+			       edge-filter)))
 		     (nodes (ht-select-keys
 			     (netz-get-nodes graph)
 			     (delete-dups (-flatten (ht-keys edges))))))
@@ -184,16 +198,8 @@ add it to existing list of edges"
 		(plist-put new-graph :edges edges)
 		new-graph)))
 
-(defun netz-get-edges-hash-for-node (node graph &optional filter)
-  (with-graph graph
-	      (let* ((edge-keys (plist-get node :edges))
-		     (edges (if filter
-				(netz-filter-edges (car filter) (cadr filter) graph)
-			      (netz-get-edges graph))))
-		(ht-select-keys edges edge-keys))))
-
 ;; TODO this works, but surely there is a cleaner way
-(defun netz-bfs-shortest-path (source target graph)
+(defun netz-bfs-shortest-path (source target graph &optional directed)
   (let* ((source-id (plist-get source :id))
 	 (target-id (plist-get target :id))
 	 (queue `((,source-id)))
@@ -204,7 +210,7 @@ add it to existing list of edges"
 	(let* ((path (pop queue))
 	       (node (-last-item path)))
 	  (unless (member node visited)
-	    (let ((neighbors (netz-node-neighbors (netz-get-node node graph))))
+	    (let ((neighbors (netz-node-neighbors (netz-get-node node graph) directed)))
 	      (dolist (neighbor neighbors)
 		(let ((new-path path))
 		  (setq new-path (-snoc new-path neighbor))
@@ -218,7 +224,21 @@ add it to existing list of edges"
 (cl-defun netz-get-related-by (node graph &key by new-name directed)
   "return graph related to `node' by edge containing `by' properties"
   (with-graph graph
-	      (netz-get-node-hood (plist-get node :id) graph new-name by)))
+	      (netz-get-node-hood (plist-get node :id) graph new-name by directed)))
+
+(defun netz--filter-edges-directed (node-id edges)
+  (ht-reject! (lambda (key edge)
+		(not (equal node-id (car key)))) edges)
+  edges)
+
+(defun netz-get-edges-hash-for-node (node graph &optional filter)
+  (with-graph graph
+	      (let* ((edge-keys (plist-get node :edges))
+		     (edges (if filter
+				(netz-filter-edges (car filter) (cadr filter) graph)
+			      (netz-get-edges graph))))
+		(ht-select-keys edges edge-keys))))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; utilities
 ;;;;;;;;;;;;;;;;;;;;;;;;
@@ -258,8 +278,13 @@ ones and overrule settings in the other lists."
         (setq rtn (plist-put rtn p v))))
     rtn))
 
-(defun netz-node-neighbors (node)
-  (delete-dups (remove (plist-get node :id) (-flatten (plist-get node :edges)))))
+(defun netz-node-neighbors (node &optional directed)
+  (let ((edges (if directed
+		   (-filter (lambda (edge)
+			      (equal (car edge) (plist-get node :id)))
+			    (plist-get node :edges))
+		 (plist-get node :edges))))
+    (delete-dups (remove (plist-get node :id) (-flatten edges)))))
 
 (defun netz-filter-edges (k v graph)
   (with-graph graph
