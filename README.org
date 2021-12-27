@@ -1,4 +1,5 @@
 * NETZ
+[[https://github.com/toshism/netz/actions/workflows/test.yml][https://github.com/toshism/netz/actions/workflows/test.yml/badge.svg]]
 
 *work in progress*
 
