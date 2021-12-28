@@ -176,7 +176,6 @@ add it to existing list of edges"
 ;; (cl-defun netz-get-node-hood (id graph &key new-graph-name edge-filter node-filter)
 ;; then use ht-reject! for filtering if new-graph-name is nil
 (defun netz-get-node-hood (id graph &optional new-graph edge-filter directed)
-  "edge-filter = '(key value)"
   (with-graph graph
 	      (let* ((source-node (netz-get-node id graph))
 		     (new-graph (if new-graph
@@ -199,6 +198,7 @@ add it to existing list of edges"
 		new-graph)))
 
 ;; TODO this works, but surely there is a cleaner way
+;; TODO return edges instead of nodes?
 (defun netz-bfs-shortest-path (source target graph &optional directed)
   (let* ((source-id (plist-get source :id))
 	 (target-id (plist-get target :id))
@@ -235,8 +235,9 @@ add it to existing list of edges"
   (with-graph graph
 	      (let* ((edge-keys (plist-get node :edges))
 		     (edges (if filter
-				(netz-filter-edges (car filter) (cadr filter) graph)
-			      (netz-get-edges graph))))
+				;; (netz-filter-edges (car filter) (cadr filter) graph)
+				(netz-filter-edges filter graph)
+				(netz-get-edges graph))))
 		(ht-select-keys edges edge-keys))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;
@@ -246,8 +247,7 @@ add it to existing list of edges"
 (defun netz-node-ids-to-graph (ids old-graph new-name)
   "takes a list of `ids' and returns a new graph
 containing the nodes and related edges."
-  (let ((new-graph (netz-make-graph new-name))
-	(old-graph (netz-get-graph old-graph)))
+  (let ((new-graph (netz-make-graph new-name)))
     (with-graph old-graph
 		(dolist (node-id ids)
 		  (netz-add-node (netz-get-node node-id old-graph) new-graph)
@@ -256,8 +256,39 @@ containing the nodes and related edges."
 		      (netz-add-edge (netz-get-edge edge-id old-graph) new-graph)))))
     new-graph))
 
+(defun netz-edge-ids-to-graph (ids old-graph new-name)
+    "takes a list of `ids' and returns a new graph
+containing the edges and related nodes."
+  (with-graph old-graph
+	      (let ((new-graph (netz-make-graph new-name)))
+		(dolist (edge-id ids)
+		  (netz-add-edge (netz-get-edge edge-id old-graph) new-graph)
+		  (netz-add-node (netz-get-node (car edge-id) old-graph) new-graph)
+		  (netz-add-node (netz-get-node (cadr edge-id) old-graph) new-graph))
+		new-graph)))
+
 (defun netz--both-edges-in-node-list (node-ids edge-id)
   (and (-contains? node-ids (car edge-id)) (-contains? node-ids (cadr edge-id))))
+
+(defmacro netz-filtered-graph (filter graph new-graph)
+  "return a new graph of filtered nodes/edges
+filter example:
+(:edges (:or (:match :type \"A\")
+             (:match :type \"B\")))"
+  (let ((filter-type (car filter))
+	(filter (cadr filter)))
+    `(with-graph ,graph
+		 ,(if (equal filter-type :nodes)
+		      `(netz-node-ids-to-graph
+			(ht-keys
+			 (netz-filter-nodes ,filter ,graph))
+			,graph
+			,new-graph)
+		    `(netz-edge-ids-to-graph
+		      (ht-keys
+		       (netz-filter-edges ,filter ,graph))
+		      ,graph
+		      ,new-graph)))))
 
 (defun netz-get-edge-property (edge-id property graph)
   (let ((edge (netz-get-edge edge-id graph)))
@@ -286,28 +317,45 @@ ones and overrule settings in the other lists."
 		 (plist-get node :edges))))
     (delete-dups (remove (plist-get node :id) (-flatten edges)))))
 
-(defun netz-filter-edges (k v graph)
+(defun netz-filter-nodes (filters graph)
+  "returns hash table of nodes"
   (with-graph graph
-	      (ht-select (lambda (key value)
-			   (equal (plist-get value k) v))
-			 (netz-get-edges graph))))
-
-(defun netz-filter-graph-edges (k v graph)
-  (with-graph graph
-	      (plist-put graph :edges (netz-filter-edges k v graph))
-	      graph))
-
-(defun netz-filter-graph-nodes (k v graph)
-  (with-graph graph
-	      (plist-put graph :nodes (netz-filter-nodes k v graph))
-	      graph))
-
-(defun netz-filter-nodes (k v graph)
-  (with-graph graph
-	      (ht-select (lambda (key value)
-			   (equal (plist-get value k) v))
+	      (ht-select filters
 			 (netz-get-nodes graph))))
 
+(defun netz-filter-edges (filters graph)
+  "returns hash table of edges"
+  (with-edges graph
+	      (ht-select filters
+			 edges)))
+;; filtering stuff
+(defun :match (k v)
+  `(lambda (key value)
+     (equal (plist-get value ,k) ,v)))
+
+(defun :or (&rest body)
+  `(lambda (key value)
+     (member t
+	     (-map (lambda (x)
+		     (funcall x key value))
+		   ',body))))
+
+(defun :and (&rest body)
+  `(lambda (key value)
+     (-all? (lambda (x) x)
+	     (-map (lambda (x)
+		     (funcall x key value))
+		   ',body))))
+
+;; TODO this doesn't really work
+(defun :not (&rest body)
+  `(lambda (key value)
+     (-none? (lambda (x) x)
+	     (-map (lambda (x)
+		     (funcall x key value))
+		   ',body))))
+
+;; graph macros
 (defmacro with-graph (graph &rest body)
   `(let ((,graph (if (not (consp ,graph))
 		     (netz-get-graph ,graph)

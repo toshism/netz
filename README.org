@@ -15,6 +15,7 @@ emacs generic graph store
 - netz-reload-graph (graph)
 - netz-get-graph (name)
 - netz-copy-graph (graph new-name &optional new-path)
+- netz-filtered-graph (filter graph new-graph)
 
 *** Nodes
 
@@ -36,3 +37,9 @@ emacs generic graph store
 - netz-get-node-hood (id graph &optional new-graph edge-filter directed)
 - netz-bfs-shortest-path (source target graph &optional directed)
 - netz-get-related-by (node graph &key by new-name directed)
+
+** Filtering
+
+- :match (property value)
+- :and (:match ...)
+- :or (:match ..)
