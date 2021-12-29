@@ -277,18 +277,17 @@ filter example:
              (:match :type \"B\")))"
   (let ((filter-type (car filter))
 	(filter (cadr filter)))
-    `(with-graph ,graph
-		 ,(if (equal filter-type :nodes)
-		      `(netz-node-ids-to-graph
-			(ht-keys
-			 (netz-filter-nodes ,filter ,graph))
-			,graph
-			,new-graph)
-		    `(netz-edge-ids-to-graph
-		      (ht-keys
-		       (netz-filter-edges ,filter ,graph))
-		      ,graph
-		      ,new-graph)))))
+    (if (equal filter-type :nodes)
+	`(netz-node-ids-to-graph
+	  (ht-keys
+	   (netz-filter-nodes ,filter ,graph))
+	  ,graph
+	  ,new-graph)
+      `(netz-edge-ids-to-graph
+	(ht-keys
+	 (netz-filter-edges ,filter ,graph))
+	,graph
+	,new-graph))))
 
 (defun netz-get-edge-property (edge-id property graph)
   (let ((edge (netz-get-edge edge-id graph)))
