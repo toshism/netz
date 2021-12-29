@@ -17,8 +17,8 @@ Graph can be the name of a graph or the actual graph structure itself.
 * [`netz-load-graph`](#netz-load-graph-path) `(path)`
 * [`netz-reload-graph`](#netz-reload-graph-graph) `(graph)`
 * [`netz-get-graph`](#netz-get-graph-name) `(name)`
-* [`netz-copy-graph`](#netz-copy-graph-graph-new-name-new-path) `(graph new-name &optional new-path)`
-* [`netz-filtered-graph`](#netz-filtered-graph) `(filter graph new-graph)`
+* [`netz-copy-graph`](#netz-copy-graph-graph-new-name-optional-new-path) `(graph new-name &optional new-path)`
+* [`netz-filtered-graph`](#netz-filtered-graph-filter-graph-new-graph) `(filter graph new-graph)`
 
 ### Nodes
 
