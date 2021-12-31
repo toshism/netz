@@ -133,12 +133,16 @@ Create and return a `graph` with name `new-graph` filtered by `filter`.
 ## Nodes
 
 Nodes are a plist with a single mandatory unique property named `:id`.
+Example:
+`'(:id 1 :label "Tag" :name "emacs")`
+
+Nodes also store a record of connected edges in the `:edges` property. This is automatically maintained by netz when relationships are managed through the provided functions.
 
 ### netz-add-node `(node graph)`
 
 Add `node` to `graph`. If node already exists it will be merged with the existing node. New values take precedence. See `netz-merge-plists` for details. Returns the updated `graph`.
 
-Add a nodoe with `:id` of 1 and a `:label` of "Note" to `:test` graph.
+Add a node with `:id` of 1 and a `:label` of "Note" to `:test` graph.
 ``` emacs-lisp
 (netz-add-node '(:id 1 :label "Note") :test)
 ```
@@ -171,5 +175,43 @@ Return a hash table of all nodes from `graph` with node `:id`s as the keys.
 Delete `node` from `graph`.
 
 ``` emacs-lisp
-(netz-delete-node '(:id 1))
+(netz-delete-node '(:id 1) :test)
+```
+
+## Edges
+
+Edges are a plist with a single mandatory unique proprty named `:id` which is a list of node ids. `:id` is a list of source and target ids.
+Example:
+`'(:id (1 2) :type "TAGGED")`
+
+### netz-add-edge (edge graph)
+
+Add `edge` to `graph`.
+
+``` emacs-lisp
+(netz-add-edge '(:id (1 2) :type "TAGGED") :test)
+```
+
+### netz-get-edge (edge-id graph)
+
+Get edge with `edge-id` from `graph`.
+
+``` emacs-lisp
+(netz-get-edge '(1 2) :test)
+```
+
+### netz-get-edges (graph)
+
+Return a hash table of all edges from `graph` with edge `:id`s as the keys.
+
+``` emacs-lisp
+(netz-get-edges :test)
+```
+
+### netz-delete-edge (edge graph)
+
+Delete `edge` from `graph`.
+
+``` emacs-lisp
+(netz-delete-edge '(:id (1 2) :type "TAGGED") :test)
 ```
