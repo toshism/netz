@@ -22,10 +22,10 @@ Graph can be the name of a graph or the actual graph structure itself.
 
 ### Nodes
 
-* netz-add-node (node graph)
-* netz-get-node (node-id graph)
-* netz-get-nodes (graph)
-* netz-delete-node (node graph)
+* [`netz-add-node`](#netz-add-node-node-graph) `(node graph)`
+* [`netz-get-node`](#netz-get-node-node-id-graph) `(node-id graph)`
+* [`netz-get-nodes`](#netz-get-nodes-graph) `(graph)`
+* [`netz-delete-node`](#netz-delete-node-node-graph) `(node graph)`
 
 ### Edges
 
