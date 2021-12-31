@@ -129,3 +129,47 @@ Create and return a `graph` with name `new-graph` filtered by `filter`.
                                   (:match :type "TAGGED")))
                      :test :linked-graph)
 ```
+
+## Nodes
+
+Nodes are a plist with a single mandatory unique property named `:id`.
+
+### netz-add-node `(node graph)`
+
+Add `node` to `graph`. If node already exists it will be merged with the existing node. New values take precedence. See `netz-merge-plists` for details. Returns the updated `graph`.
+
+Add a nodoe with `:id` of 1 and a `:label` of "Note" to `:test` graph.
+``` emacs-lisp
+(netz-add-node '(:id 1 :label "Note") :test)
+```
+
+If we then call
+
+``` emacs-lisp
+(netz-add-node '(:id 1 :label "Tag" :name "test") :test)
+```
+Node with id 1 will be equal to `(:id 1 :label "Tag" :name "test")`
+
+### netz-get-node `(node-id graph)`
+
+Return node with `node-id` from `graph`.
+
+``` emacs-lisp
+(netz-get-node 1 :test)
+```
+
+### netz-get-nodes `(graph)`
+
+Return a hash table of all nodes from `graph` with node `:id`s as the keys.
+
+``` emacs-lisp
+(netz-get-nodes :test)
+```
+
+### netz-delete-node `(node graph)`
+
+Delete `node` from `graph`.
+
+``` emacs-lisp
+(netz-delete-node '(:id 1))
+```
