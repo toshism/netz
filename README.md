@@ -1,10 +1,12 @@
-[![test](https://github.com/toshism/netz/actions/workflows/test.yml/badge.svg)](https://github.com/toshism/netz/actions/workflows/test.yml)
+[![tests](https://github.com/toshism/netz/actions/workflows/test.yml/badge.svg)](https://github.com/toshism/netz/actions/workflows/test.yml)
 
 # NETZ
 
-*work in progress*
+Emacs generic graph store.
 
-emacs generic graph store
+Consider this alpha currently. The functions documented here should work, but things could change. To get an idea of how it works take a look at the [`tests`](https://github.com/toshism/netz/blob/main/tests/test-netz.el).
+
+Graphs are stored in memory and optionally backed up to disk. Convenience is preferred over space, so consider that before adding millions of nodes/edges, but even up to a million or so seems to be fine (although very little testing has been done on graphs that size).
 
 ## Functions
 
@@ -129,6 +131,7 @@ Create and return a `graph` with name `new-graph` filtered by `filter`.
                                   (:match :type "TAGGED")))
                      :test :linked-graph)
 ```
+Filters can be for either `:edges` or `:nodes` but currently only one or the other.
 
 ## Nodes
 
