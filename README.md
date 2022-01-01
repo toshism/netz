@@ -219,6 +219,52 @@ Delete `edge` from `graph`.
 ## Relationships
 
 ### netz-connect-nodes `(source target edge-params graph)`
+
+Connect `source` to `target` with edge having `edge-params` in `graph`.
+
+``` emacs-lisp
+(setq one (netz-get-node 1 :test)
+(setq two (netz-get-node 2 :test)
+(netz-connect-nodes one two '(:type "LINKS_TO") :test)
+```
+
 ### netz-get-node-hood `(id graph &optional new-graph edge-filter directed)`
+
+Get the neighborhood for node with `id` in `graph`.
+*optional*
+If `new-graph` is nil modify graph in place, if it is non-nil return a new graph named `new-graph`.
+`edge-filter` limits the neighborhood by properties of the edges.
+`directed` is a boolean value to specify if the neighborhood should consider edge direction in a directed graph.
+
+``` emacs-lisp
+(netz-get-node-hood 1 :test)
+```
+
+Return a new graph named "hood" for node id 1 and connected nodes through a "RELATED" property.
+
+``` emacs-lisp
+(netz-get-node-hood 1 :test :hood (:match :type "RELATED"))
+```
+See `filtering` for more details on filtering syntax.
+
 ### netz-bfs-shortest-path `(source target graph &optional directed)`
+
+Return the shortest path, as a list of node ids, between `source` and `target` in `graph`.
+*optional*
+If `directed` is nil ignore direction.
+
+``` emacs-lisp
+(setq start (netz-get-node 1 :test))
+(setq end (netz-get-node 2 :test))
+(netz-bfs-shortest-path start end :test)
+```
+
 ### netz-get-related-by `(node graph &key by new-name directed)`
+
+Return a graph named `new-name` that contains nodes related to `node` with edges properties `by` in `graph`, optionally `directed`.
+
+Sounds confusing but it's similar to neighborhood.
+
+``` emacs-lisp
+(netz-get-related-by (netz-get-node 1 :test) :test '(:match :type "LINKS_TO") :links-to t)
+```
