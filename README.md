@@ -29,17 +29,17 @@ Graph can be the name of a graph or the actual graph structure itself.
 
 ### Edges
 
-* netz-add-edge (edge graph)
-* netz-get-edge (edge-id graph)
-* netz-get-edges (graph)
-* netz-delete-edge (edge graph)
+* [`netz-add-edge`](#netz-add-edge-edge-graph) `(edge graph)`
+* [`netz-get-edge`](#netz-get-edge-edge-id-graph) `(edge-id graph)`
+* [`netz-get-edges`](#netz-get-edges-graph) `(graph)`
+* [`netz-delete-edge`](#netz-delete-edge-edge-graph) `(edge graph)`
 
 ### Relationships
 
-* netz-connect-nodes (source target edge-params graph) -- probably just make this netz-add-edge?
-* netz-get-node-hood (id graph &optional new-graph edge-filter directed)
-* netz-bfs-shortest-path (source target graph &optional directed)
-* netz-get-related-by (node graph &key by new-name directed)
+* [`netz-connect-nodes`](#netz-connect-nodes-source-target-edge-params-graph) `(source target edge-params graph)` -- probably just make this netz-add-edge?
+* [`netz-get-node-hood`](#netz-get-node-hood-id-graph-optional-new-graph-edge-filter-directed) `(id graph &optional new-graph edge-filter directed)`
+* [`netz-bfs-shortest-path`](#netz-bfs-shortest-path-source-target-graph-optional-directed) `(source target graph &optional directed)`
+* [`netz-get-related-by`](#netz-get-related-by-node-graph-key-by-new-name-directed) `(node graph &key by new-name directed)`
 
 ### Filtering
 
