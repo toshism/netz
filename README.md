@@ -184,7 +184,7 @@ Edges are a plist with a single mandatory unique proprty named `:id` which is a 
 Example:
 `'(:id (1 2) :type "TAGGED")`
 
-### netz-add-edge (edge graph)
+### netz-add-edge `(edge graph)`
 
 Add `edge` to `graph`.
 
@@ -192,7 +192,7 @@ Add `edge` to `graph`.
 (netz-add-edge '(:id (1 2) :type "TAGGED") :test)
 ```
 
-### netz-get-edge (edge-id graph)
+### netz-get-edge `(edge-id graph)`
 
 Get edge with `edge-id` from `graph`.
 
@@ -200,7 +200,7 @@ Get edge with `edge-id` from `graph`.
 (netz-get-edge '(1 2) :test)
 ```
 
-### netz-get-edges (graph)
+### netz-get-edges `(graph)`
 
 Return a hash table of all edges from `graph` with edge `:id`s as the keys.
 
@@ -208,10 +208,17 @@ Return a hash table of all edges from `graph` with edge `:id`s as the keys.
 (netz-get-edges :test)
 ```
 
-### netz-delete-edge (edge graph)
+### netz-delete-edge `(edge graph)`
 
 Delete `edge` from `graph`.
 
 ``` emacs-lisp
 (netz-delete-edge '(:id (1 2) :type "TAGGED") :test)
 ```
+
+## Relationships
+
+### netz-connect-nodes `(source target edge-params graph)`
+### netz-get-node-hood `(id graph &optional new-graph edge-filter directed)`
+### netz-bfs-shortest-path `(source target graph &optional directed)`
+### netz-get-related-by `(node graph &key by new-name directed)`
