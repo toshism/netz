@@ -268,3 +268,34 @@ Sounds confusing but it's similar to neighborhood.
 ``` emacs-lisp
 (netz-get-related-by (netz-get-node 1 :test) :test '(:match :type "LINKS_TO") :links-to t)
 ```
+
+## Filtering
+
+Filtering functions are used as arguments for any functions that accept filter parameters. They can be combined and nested.
+
+### :match `(property value)`
+
+`:match` is used to select a node or edge by the `value` of a `property`. Equality is checked with `equal`.
+
+The following will match a node or edge with the `:label` value of `Note`.
+``` emacs-lisp
+(:match :label "Note")
+```
+
+### :and `(:match ...)`
+
+`:and` can be used to combine `:match` statements with logical and.
+
+``` emacs-lisp
+(:and (:match :label "Note")
+      (:match :type "A"))
+```
+
+### :or `(:match ...)`
+
+`:or` can be used to combine `:match` statements with logical or.
+
+``` emacs-lisp
+(:or (:match :label "Note")
+     (:match :type "A"))
+```
