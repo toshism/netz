@@ -245,7 +245,7 @@ Return a new graph named "hood" for node id 1 and connected nodes through a "REL
 ``` emacs-lisp
 (netz-get-node-hood 1 :test :hood (:match :type "RELATED"))
 ```
-See `filtering` for more details on filtering syntax.
+See [`filtering`](#filtering-1) for more details on filtering syntax.
 
 ### netz-bfs-shortest-path `(source target graph &optional directed)`
 
@@ -266,12 +266,14 @@ Return a graph named `new-name` that contains nodes related to `node` with edges
 Sounds confusing but it's similar to neighborhood.
 
 ``` emacs-lisp
-(netz-get-related-by (netz-get-node 1 :test) :test '(:match :type "LINKS_TO") :links-to t)
+(netz-get-related-by (netz-get-node 1 :test) :test (:match :type "LINKS_TO") :links-to t)
 ```
 
 ## Filtering
 
 Filtering functions are used as arguments for any functions that accept filter parameters. They can be combined and nested.
+
+See [`netz-filtered-graph`](#netz-filtered-graph-filter-graph-new-graph) for an example.
 
 ### :match `(property value)`
 
