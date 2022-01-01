@@ -43,9 +43,9 @@ Graph can be the name of a graph or the actual graph structure itself.
 
 ### Filtering
 
-- :match (property value)
-- :and (:match ...)
-- :or (:match ..)
+- [`:match`](#match-property-value) `(property value)`
+- [`:and`](#and-match-) `(:match ...)`
+- [`:or`](#or-match-) `(:match ..)`
 
 ## Graphs
 
