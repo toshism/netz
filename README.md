@@ -4,7 +4,7 @@
 
 Emacs generic graph store.
 
-Consider this alpha currently. The functions documented here should work, but things could change. To get an idea of how it works take a look at the [`tests`](https://github.com/toshism/netz/blob/main/tests/test-netz.el).
+Consider this alpha currently, it's very much in progress. The basic functions documented here should work, but things could change and there are still quite a few features I would like to add. It's a start... To get an idea of how it works take a look at the [`tests`](https://github.com/toshism/netz/blob/main/tests/test-netz.el).
 
 Graphs are stored in memory and optionally backed up to disk. Convenience is preferred over space, so consider that before adding millions of nodes/edges, but even up to a million or so seems to be fine (although very little testing has been done on graphs that size).
 
