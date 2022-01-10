@@ -1,7 +1,7 @@
 (source gnu)
 (source melpa)
 
+(package-file "netz.el")
+
 (development
- (depends-on "buttercup")
- (depends-on "ht")
- (depends-on "dash"))
+ (depends-on "buttercup"))

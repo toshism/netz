@@ -1,6 +1,36 @@
+;;; netz.el --- Emacs generic graph store            -*- lexical-binding: t; -*-
+
+;; Copyright (C) 2022  tosh
+
+;; Author: tosh <tosh.lyons@gmail.com>
+;; Version: 0.1
+;; Package-requires: ((emacs "25.1") ht dash cl-lib)
+;; Keywords: tools, maint
+
+;; This program is free software; you can redistribute it and/or modify
+;; it under the terms of the GNU General Public License as published by
+;; the Free Software Foundation, either version 3 of the License, or
+;; (at your option) any later version.
+
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU General Public License for more details.
+
+;; You should have received a copy of the GNU General Public License
+;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+;;; Commentary:
+
+;;
+
+;;; Code:
+
 (require 'cl-lib)
 (require 'ht)
 (require 'dash)
+
+;;; Code:
 
 (defvar *netz-graph-store* (concat user-emacs-directory ".netz-graph"))
 (defvar *netz-graphs* (ht-create 'equal))
@@ -165,7 +195,7 @@ add it to existing list of edges"
 ;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defun netz-connect-nodes (source target edge-params graph)
-  "add edge with `edge-params' connecting `source' and `target'"
+  "Add edge with `EDGE-PARAMS' connecting `SOURCE' and `TARGET'."
   (with-nodes-edges graph
 		    (let ((edge `(,(plist-get source :id) ,(plist-get target :id))))
 		      (ht-set! edges edge (plist-put edge-params :id edge))
@@ -222,7 +252,7 @@ add it to existing list of edges"
 
 ;; just a trial, not sure how i want this yet
 (cl-defun netz-get-related-by (node graph &key by new-name directed)
-  "return graph related to `node' by edge containing `by' properties"
+  "Return graph related to `NODE' by edge containing `by' properties."
   (with-graph graph
 	      (netz-get-node-hood (plist-get node :id) graph new-name by directed)))
 
@@ -378,3 +408,5 @@ ones and overrule settings in the other lists."
 		 ,@body)))
 
 (provide 'netz)
+
+;;; netz.el ends here
