@@ -38,6 +38,30 @@
 ;; :nodes (ht-create 'equal)
 ;; :edges (ht-create 'equal))
 
+
+;; graph macros
+(defmacro with-graph (graph &rest body)
+  `(let ((,graph (if (not (consp ,graph))
+		     (netz-get-graph ,graph)
+		   ,graph)))
+     ,@body))
+
+(defmacro with-nodes (graph &rest body)
+  `(with-graph ,graph
+	       (let ((nodes (plist-get ,graph :nodes)))
+		 ,@body)))
+
+(defmacro with-edges (graph &rest body)
+  `(with-graph ,graph
+	       (let ((edges (plist-get ,graph :edges)))
+		 ,@body)))
+
+(defmacro with-nodes-edges (graph &rest body)
+  `(with-graph ,graph
+	       (let ((edges (plist-get ,graph :edges))
+		     (nodes (plist-get ,graph :nodes)))
+		 ,@body)))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; graph management
 ;;;;;;;;;;;;;;;;;;;;;;;;
@@ -382,28 +406,6 @@ ones and overrule settings in the other lists."
 		     (funcall x key value))
 		   ',body))))
 
-;; graph macros
-(defmacro with-graph (graph &rest body)
-  `(let ((,graph (if (not (consp ,graph))
-		     (netz-get-graph ,graph)
-		   ,graph)))
-     ,@body))
-
-(defmacro with-nodes (graph &rest body)
-  `(with-graph ,graph
-	       (let ((nodes (plist-get ,graph :nodes)))
-		 ,@body)))
-
-(defmacro with-edges (graph &rest body)
-  `(with-graph ,graph
-	       (let ((edges (plist-get ,graph :edges)))
-		 ,@body)))
-
-(defmacro with-nodes-edges (graph &rest body)
-  `(with-graph ,graph
-	       (let ((edges (plist-get ,graph :edges))
-		     (nodes (plist-get ,graph :nodes)))
-		 ,@body)))
 
 (provide 'netz)
 
