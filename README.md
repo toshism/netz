@@ -4,9 +4,13 @@
 
 Emacs generic graph store.
 
-Consider this alpha currently, it's very much in progress. The basic functions documented here should work, but things could change and there are still quite a few features I would like to add. It's a start... To get an idea of how it works take a look at the [`tests`](https://github.com/toshism/netz/blob/main/tests/test-netz.el).
+A lot of the things I've been interested in building in emacs lately have been pretty graph-y, so I thought it would be nice to have a standard data store for them in emacs instead of having to use external data stores. It makes things a lot easier to augment with other packages, add additional functionality etc.. This is the start of an attempt at that. The data structure may be a bit unconventional for a graph, but it's working out ok so far.
 
-Graphs are stored in memory and optionally backed up to disk. Convenience is preferred over space, so consider that before adding millions of nodes/edges, but even up to a million or so seems to be fine (although very little testing has been done on graphs that size).
+## Current Status
+
+Consider this alpha currently, it's very much in progress. Functions documented here should work, and should have test coverage, but things could change and there are still a lot of features I would like to add. I think most of the primitives are here though. It's a start... To get an idea of how it works take a look at the [`tests`](https://github.com/toshism/netz/blob/main/tests/test-netz.el).
+
+Graphs are stored in memory and optionally backed up to disk. Convenience is preferred over space, so consider that before adding millions of nodes/edges, but even up to a million or so seems to be fine (although very little testing has been done on large graphs).
 
 ## Functions
 
