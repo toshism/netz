@@ -30,8 +30,6 @@
 (require 'ht)
 (require 'dash)
 
-;;; Code:
-
 (defvar *netz-graph-store* (concat user-emacs-directory ".netz-graph"))
 (defvar *netz-graphs* (ht-create 'equal))
 
