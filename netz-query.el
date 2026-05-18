@@ -160,19 +160,6 @@
                  (netz-query--node-candidates graph props)))))
     (_ (error "Malformed node pattern: %S" pattern))))
 
-(defun netz-query--edge-endpoint-p (edge bound-var candidate-var row direction)
-  (let ((bound-id (plist-get (netz-query--require-bound row bound-var) :id))
-        (candidate-id (plist-get candidate-var :id)))
-    (pcase direction
-      (:out (and (equal (plist-get edge :source) bound-id)
-                 (equal (plist-get edge :target) candidate-id)))
-      (:in (and (equal (plist-get edge :target) bound-id)
-                (equal (plist-get edge :source) candidate-id)))
-      (:any (or (and (equal (plist-get edge :source) bound-id)
-                     (equal (plist-get edge :target) candidate-id))
-                (and (equal (plist-get edge :target) bound-id)
-                     (equal (plist-get edge :source) candidate-id)))))))
-
 (defun netz-query--edge-neighbor (graph edge node-id direction)
   (pcase direction
     (:out (when (equal (plist-get edge :source) node-id)
