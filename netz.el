@@ -1,7 +1,7 @@
 ;;; netz.el --- Emacs generic graph store            -*- lexical-binding: t; -*-
 
 ;; Version: 0.1
-;; Package-Requires: ((emacs "25.1") (ht "2.4") (dash "2.19"))
+;; Package-Requires: ((emacs "26.3") (ht "2.4") (dash "2.19"))
 ;; Keywords: tools, maint
 
 ;;; Commentary:
