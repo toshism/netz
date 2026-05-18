@@ -1,28 +1,11 @@
 ;;; netz.el --- Emacs generic graph store            -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2022  tosh
-
-;; Author: tosh <tosh.lyons@gmail.com>
 ;; Version: 0.1
-;; Package-requires: ((emacs "25.1") ht dash cl-lib)
+;; Package-Requires: ((emacs "26.3") (ht "2.4") (dash "2.19"))
 ;; Keywords: tools, maint
 
-;; This program is free software; you can redistribute it and/or modify
-;; it under the terms of the GNU General Public License as published by
-;; the Free Software Foundation, either version 3 of the License, or
-;; (at your option) any later version.
-
-;; This program is distributed in the hope that it will be useful,
-;; but WITHOUT ANY WARRANTY; without even the implied warranty of
-;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-;; GNU General Public License for more details.
-
-;; You should have received a copy of the GNU General Public License
-;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
-
 ;;; Commentary:
-
-;;
+;; Generic directed property graph store for Emacs Lisp.
 
 ;;; Code:
 
@@ -33,379 +16,216 @@
 (defvar *netz-graph-store* (concat user-emacs-directory ".netz-graph"))
 (defvar *netz-graphs* (ht-create 'equal))
 
-;; '(:name :test
-;; :path *netz-graph-store* + name
-;; :nodes (ht-create 'equal)
-;; :edges (ht-create 'equal))
+(cl-defstruct netz-graph
+  name
+  path
+  nodes
+  edges
+  out-index
+  in-index)
 
-
-;; graph macros
-(defmacro with-graph (graph &rest body)
-  `(let ((,graph (if (not (consp ,graph))
-		     (netz-get-graph ,graph)
-		   ,graph)))
-     ,@body))
-
-(defmacro with-nodes (graph &rest body)
-  `(with-graph ,graph
-	       (let ((nodes (plist-get ,graph :nodes)))
-		 ,@body)))
-
-(defmacro with-edges (graph &rest body)
-  `(with-graph ,graph
-	       (let ((edges (plist-get ,graph :edges)))
-		 ,@body)))
-
-(defmacro with-nodes-edges (graph &rest body)
-  `(with-graph ,graph
-	       (let ((edges (plist-get ,graph :edges))
-		     (nodes (plist-get ,graph :nodes)))
-		 ,@body)))
-
-;;;;;;;;;;;;;;;;;;;;;;;;
-;;; graph management
-;;;;;;;;;;;;;;;;;;;;;;;;
-;; loading, saving, etc.
-
-
-(defun netz-make-graph (name &optional path save)
-  (let* ((path (netz-get-path name path))
-	 (graph `(:name ,name
-			:path ,path
-			:nodes ,(ht-create 'equal)
-			:edges ,(ht-create 'equal))))
-    (ht-set! *netz-graphs* name graph)
-    (when save
-      (netz-save-graph name))
-    graph))
-
-(defun netz-save-graph (graph)
-  (with-graph graph
-	      (make-directory (file-name-directory (plist-get graph :path)) t)
-	      (ht-set! *netz-graphs* (plist-get graph :name) graph)
-	      (with-temp-buffer
-		(prin1 graph (current-buffer))
-		(write-file (plist-get graph :path) nil))
-	      graph))
-
-(defun netz-load-graph (path)
-  (if (file-exists-p path)
-      (let* ((graph (read (netz-file-to-string path))))
-	(ht-set! *netz-graphs* (plist-get graph :name) graph)
-	graph)
-    (error "File not found")))
-
-(defun netz-reload-graph (graph)
-  (with-graph graph
-	      (netz-load-graph (plist-get graph :path))))
-
-(defun netz-get-graph (name)
-  "get graph from cache"
-  (ht-get *netz-graphs* name))
-
-(defun netz-copy-graph (graph new-name &optional new-path)
-  (with-graph graph
-	      (let ((new-graph (netz-make-graph new-name new-path)))
-		(plist-put new-graph :nodes (netz-get-nodes graph))
-		(plist-put new-graph :edges (netz-get-edges graph))
-		new-graph)))
-
-(defun netz-file-to-string (file)
-  "File to string function"
-  (with-temp-buffer
-    (insert-file-contents file)
-    (buffer-string)))
+(defun netz--keyword-name (name)
+  (cond ((keywordp name) (substring (symbol-name name) 1))
+        ((symbolp name) (symbol-name name))
+        ((numberp name) (number-to-string name))
+        ((stringp name) name)
+        (t (error "Name must be a string, symbol, keyword, or number"))))
 
 (defun netz-get-path (name &optional path)
-  (let ((name (cond ((keywordp name)
-		     (symbol-name (intern (substring (symbol-name name) 1))))
-		    ((numberp name)
-		     (number-to-string name))
-		    ((stringp name)
-		     name)
-		    (t (error "Name must be a string, keyword, or number.")))))
-    (if (not path)
-	(concat *netz-graph-store* "/" name)
-      path)))
+  (or path (concat (file-name-as-directory *netz-graph-store*)
+                   (netz--keyword-name name))))
 
-;;;;;;;;;;;;;;;;;;;;;;;;
-;;; node mangement
-;;;;;;;;;;;;;;;;;;;;;;;;
-;; creating, adding, modifying, etc
+(defun netz--coerce-graph (graph)
+  (cond ((netz-graph-p graph) graph)
+        ((or (keywordp graph) (symbolp graph) (stringp graph) (numberp graph))
+         (or (ht-get *netz-graphs* graph)
+             (ht-get *netz-graphs* (intern (format ":%s" (netz--keyword-name graph))))
+             (ht-get *netz-graphs* (netz--keyword-name graph))
+             (error "Graph not found: %S" graph)))
+        (t (error "Invalid graph: %S" graph))))
 
-(defun netz-add-node (node graph)
-  "Add `node' to `graph'.
-If node already exists it will be merged with new values.
-see `netz-merge-plists' for details."
-  (unless (plist-get node :id)
-    (error "Node must include an :id parameter"))
-  (with-nodes graph
-	      (ht-set!
-	       nodes
-	       (plist-get node :id)
-	       (netz-merge-plists (netz-get-node (plist-get node :id) graph) node))
-	      graph))
+(cl-defun netz--make-graph (name &key path)
+  "Create an empty graph named NAME without registering it."
+  (make-netz-graph :name name
+                   :path (netz-get-path name path)
+                   :nodes (ht-create 'equal)
+                   :edges (ht-create 'equal)
+                   :out-index (ht-create 'equal)
+                   :in-index (ht-create 'equal)))
 
-(defun netz-get-node (node-id graph)
-  (with-nodes graph
-	      (ht-get nodes node-id)))
+(cl-defun netz-create-graph (name &key path save)
+  "Create and register an empty graph named NAME."
+  (let ((graph (netz--make-graph name :path path)))
+    (ht-set! *netz-graphs* name graph)
+    (when save (netz-save-graph graph))
+    graph))
+
+(defalias 'netz-make-graph #'netz-create-graph)
+
+(defun netz-get-graph (name)
+  "Return registered graph NAME."
+  (ht-get *netz-graphs* name))
+
+(defun netz-graph-node-count (graph)
+  (ht-size (netz-graph-nodes (netz--coerce-graph graph))))
+
+(defun netz-graph-edge-count (graph)
+  (ht-size (netz-graph-edges (netz--coerce-graph graph))))
+
+(defun netz--ht-values (table)
+  (let (values)
+    (maphash (lambda (_ value) (push value values)) table)
+    (nreverse values)))
+
+(defun netz-prop (entity prop)
+  "Return PROP from plist ENTITY."
+  (plist-get entity prop))
+
+(defun netz-merge-plists (&rest plists)
+  "Merge PLISTS with later values winning."
+  (let ((result (copy-sequence (or (pop plists) nil))))
+    (dolist (plist plists result)
+      (while plist
+        (setq result (plist-put result (pop plist) (pop plist)))))))
+
+(defun netz-add-node (graph node)
+  "Add NODE plist to GRAPH, merging if the id already exists."
+  (setq graph (netz--coerce-graph graph))
+  (let ((id (plist-get node :id)))
+    (unless id (error "Node must include an :id parameter"))
+    (ht-set! (netz-graph-nodes graph)
+             id
+             (netz-merge-plists (netz-get-node graph id) node))
+    graph))
+
+(defun netz-get-node (graph node-id)
+  "Return node NODE-ID from GRAPH."
+  (ht-get (netz-graph-nodes (netz--coerce-graph graph)) node-id))
 
 (defun netz-get-nodes (graph)
-  (with-nodes graph
-	      nodes))
+  "Return all node plists from GRAPH."
+  (netz--ht-values (netz-graph-nodes (netz--coerce-graph graph))))
 
-(defun netz-delete-node (node graph)
-  (with-nodes-edges graph
-		    (let ((node-id (plist-get node :id))
-			  (node-edges (plist-get node :edges)))
-		      (ht-remove! nodes node-id)
-		      (mapc (lambda (edge)
-			      (ht-remove! edges edge)
-			      (netz--delete-edge-from-node-edges
-			       (car (remove node-id edge)) edge graph))
-			    node-edges))))
+(defun netz--index-add (index node-id edge-id)
+  (ht-set! index node-id (delete-dups (cons edge-id (ht-get index node-id)))))
 
-(defun netz-add-edge-to-node (node edge)
-  "get current edges from `node', if `edge' doesn't exist
-add it to existing list of edges"
-  (let ((edges (plist-get node :edges)))
-    (if (member edge edges)
-	node
-      (plist-put node :edges (cons edge (plist-get node :edges))))))
+(defun netz--index-remove (index node-id edge-id)
+  (let ((remaining (remove edge-id (ht-get index node-id))))
+    (if remaining
+        (ht-set! index node-id remaining)
+      (ht-remove! index node-id))))
 
-(defun netz--delete-edge-from-node-edges (node-id edge-id graph)
-  (with-graph graph
-	      (let ((node (netz-get-node node-id graph)))
-		(plist-put node :edges (remove edge-id (plist-get node :edges))))))
+(defun netz--remove-edge-from-indexes (graph edge)
+  (when edge
+    (netz--index-remove (netz-graph-out-index graph) (plist-get edge :source) (plist-get edge :id))
+    (netz--index-remove (netz-graph-in-index graph) (plist-get edge :target) (plist-get edge :id))))
 
-;;;;;;;;;;;;;;;;;;;;;;;;
-;;; edge management
-;;;;;;;;;;;;;;;;;;;;;;;;
-;; creating, adding, modifying etc
+(defun netz--add-edge-to-indexes (graph edge)
+  (netz--index-add (netz-graph-out-index graph) (plist-get edge :source) (plist-get edge :id))
+  (netz--index-add (netz-graph-in-index graph) (plist-get edge :target) (plist-get edge :id)))
 
-(defun netz-add-edge (edge graph)
-  (unless (plist-get edge :id)
-    (error "Edge must include an :id parameter"))
-  (with-graph graph
-	      (let ((edge-id (plist-get edge :id)))
-		(netz-add-node `(:id ,(car edge-id)) graph)
-		(netz-add-node `(:id ,(cadr edge-id)) graph)
-		(netz-connect-nodes
-		 (netz-get-node (car edge-id) graph)
-		 (netz-get-node (cadr edge-id) graph)
-		 edge
-		 graph))))
+(defun netz-add-edge (graph edge)
+  "Add directed EDGE plist to GRAPH.
+EDGE must include :id, :source, and :target."
+  (setq graph (netz--coerce-graph graph))
+  (let ((id (plist-get edge :id))
+        (source (plist-get edge :source))
+        (target (plist-get edge :target)))
+    (unless id (error "Edge must include an :id parameter"))
+    (unless source (error "Edge must include a :source parameter"))
+    (unless target (error "Edge must include a :target parameter"))
+    (unless (netz-get-node graph source) (netz-add-node graph `(:id ,source)))
+    (unless (netz-get-node graph target) (netz-add-node graph `(:id ,target)))
+    (netz--remove-edge-from-indexes graph (netz-get-edge graph id))
+    (ht-set! (netz-graph-edges graph) id edge)
+    (netz--add-edge-to-indexes graph edge)
+    graph))
 
-(defun netz-get-edge (edge-id graph)
-  (with-edges graph
-	      (ht-get edges edge-id)))
+(defun netz-get-edge (graph edge-id)
+  "Return edge EDGE-ID from GRAPH."
+  (ht-get (netz-graph-edges (netz--coerce-graph graph)) edge-id))
 
 (defun netz-get-edges (graph)
-  (with-edges graph
-	      edges))
+  "Return all edge plists from GRAPH."
+  (netz--ht-values (netz-graph-edges (netz--coerce-graph graph))))
 
-(defun netz-delete-edge (edge graph)
-  "delete edge and clean up node edges"
-  (with-edges graph
-	      (let ((edge-id (plist-get edge :id)))
-		(ht-remove! edges edge-id)
-		(netz--delete-edge-from-node-edges (car edge-id) edge-id graph)
-		(netz--delete-edge-from-node-edges (cadr edge-id) edge-id graph))))
+(defun netz--valid-direction-p (direction)
+  (memq direction '(:out :in :any)))
 
-;;;;;;;;;;;;;;;;;;;;;;;;
-;;; relationships
-;;;;;;;;;;;;;;;;;;;;;;;;
+(cl-defun netz-node-edge-ids (graph node-id &key (direction :any))
+  "Return edge ids incident to NODE-ID in GRAPH for DIRECTION."
+  (setq graph (netz--coerce-graph graph))
+  (unless (netz--valid-direction-p direction)
+    (error "Invalid edge direction: %S" direction))
+  (pcase direction
+    (:out (copy-sequence (ht-get (netz-graph-out-index graph) node-id)))
+    (:in (copy-sequence (ht-get (netz-graph-in-index graph) node-id)))
+    (:any (delete-dups (append (netz-node-edge-ids graph node-id :direction :out)
+                               (netz-node-edge-ids graph node-id :direction :in))))))
 
-(defun netz-connect-nodes (source target edge-params graph)
-  "Add edge with `EDGE-PARAMS' connecting `SOURCE' and `TARGET'."
-  (with-nodes-edges graph
-		    (let ((edge `(,(plist-get source :id) ,(plist-get target :id))))
-		      (ht-set! edges edge (plist-put edge-params :id edge))
-		      ;; (netz-add-edge (plist-put edge-params :id edge) graph)
-		      (netz-add-node (netz-add-edge-to-node target edge) graph)
-		      (netz-add-node (netz-add-edge-to-node source edge) graph))))
+(defun netz-delete-edge (graph edge-or-id)
+  "Delete EDGE-OR-ID from GRAPH and update indexes."
+  (setq graph (netz--coerce-graph graph))
+  (let* ((edge-id (if (consp edge-or-id) (plist-get edge-or-id :id) edge-or-id))
+         (edge (netz-get-edge graph edge-id)))
+    (when edge
+      (netz--remove-edge-from-indexes graph edge)
+      (ht-remove! (netz-graph-edges graph) edge-id))
+    graph))
 
-;; (cl-defun netz-get-node-hood (id graph &key new-graph-name edge-filter node-filter)
-;; then use ht-reject! for filtering if new-graph-name is nil
-(defun netz-get-node-hood (id graph &optional new-graph edge-filter directed)
-  (with-graph graph
-	      (let* ((source-node (netz-get-node id graph))
-		     (new-graph (if new-graph
-				    (netz-make-graph new-graph)
-				  graph))
-		     (edges (if directed
-				(netz--filter-edges-directed id (netz-get-edges-hash-for-node
-								 source-node
-								 graph
-								 edge-filter))
-			      (netz-get-edges-hash-for-node
-			       source-node
-			       graph
-			       edge-filter)))
-		     (nodes (ht-select-keys
-			     (netz-get-nodes graph)
-			     (delete-dups (-flatten (ht-keys edges))))))
-		(plist-put new-graph :nodes nodes)
-		(plist-put new-graph :edges edges)
-		new-graph)))
+(cl-defun netz-delete-node (graph node-or-id &key detach)
+  "Delete NODE-OR-ID from GRAPH.  With DETACH, delete incident edges first."
+  (setq graph (netz--coerce-graph graph))
+  (let* ((node-id (if (consp node-or-id) (plist-get node-or-id :id) node-or-id))
+         (incident (netz-node-edge-ids graph node-id :direction :any)))
+    (when (and incident (not detach))
+      (error "Cannot delete node with incident edges without :detach"))
+    (dolist (edge-id incident)
+      (netz-delete-edge graph edge-id))
+    (ht-remove! (netz-graph-nodes graph) node-id)
+    graph))
 
-;; TODO this works, but surely there is a cleaner way
-;; TODO return edges instead of nodes?
-(defun netz-bfs-shortest-path (source target graph &optional directed)
-  (let* ((source-id (plist-get source :id))
-	 (target-id (plist-get target :id))
-	 (queue `((,source-id)))
-	 (visited nil)
-	 (result nil))
-    (catch 'found
-      (while queue
-	(let* ((path (pop queue))
-	       (node (-last-item path)))
-	  (unless (member node visited)
-	    (let ((neighbors (netz-node-neighbors (netz-get-node node graph) directed)))
-	      (dolist (neighbor neighbors)
-		(let ((new-path path))
-		  (setq new-path (-snoc new-path neighbor))
-		  (setq queue (-snoc queue new-path))
-		  (when (equal neighbor target-id)
-		    (setq result new-path)
-		    (throw 'found result))))
-	      (setq visited (-snoc visited node)))))))))
+(defun netz--rebuild-indexes (graph)
+  (setf (netz-graph-out-index graph) (ht-create 'equal)
+        (netz-graph-in-index graph) (ht-create 'equal))
+  (dolist (edge (netz-get-edges graph))
+    (netz--add-edge-to-indexes graph edge))
+  graph)
 
-;; just a trial, not sure how i want this yet
-(cl-defun netz-get-related-by (node graph &key by new-name directed)
-  "Return graph related to `NODE' by edge containing `by' properties."
-  (with-graph graph
-	      (netz-get-node-hood (plist-get node :id) graph new-name by directed)))
+(defun netz-save-graph (graph)
+  "Persist GRAPH to its path."
+  (setq graph (netz--coerce-graph graph))
+  (make-directory (file-name-directory (netz-graph-path graph)) t)
+  (with-temp-file (netz-graph-path graph)
+    (prin1 graph (current-buffer)))
+  (ht-set! *netz-graphs* (netz-graph-name graph) graph)
+  graph)
 
-(defun netz--filter-edges-directed (node-id edges)
-  (ht-reject! (lambda (key edge)
-		(not (equal node-id (car key)))) edges)
-  edges)
+(defun netz-load-graph (path)
+  "Load graph from PATH and register it."
+  (unless (file-exists-p path)
+    (error "File not found"))
+  (let ((graph (with-temp-buffer
+                 (insert-file-contents path)
+                 (read (current-buffer)))))
+    (unless (netz-graph-p graph)
+      (error "File does not contain a netz graph"))
+    (unless (netz-graph-out-index graph) (setf (netz-graph-out-index graph) (ht-create 'equal)))
+    (unless (netz-graph-in-index graph) (setf (netz-graph-in-index graph) (ht-create 'equal)))
+    (netz--rebuild-indexes graph)
+    (ht-set! *netz-graphs* (netz-graph-name graph) graph)
+    graph))
 
-(defun netz-get-edges-hash-for-node (node graph &optional filter)
-  (with-graph graph
-	      (let* ((edge-keys (plist-get node :edges))
-		     (edges (if filter
-				;; (netz-filter-edges (car filter) (cadr filter) graph)
-				(netz-filter-edges filter graph)
-				(netz-get-edges graph))))
-		(ht-select-keys edges edge-keys))))
+(defun netz-reload-graph (graph)
+  (netz-load-graph (netz-graph-path (netz--coerce-graph graph))))
 
-;;;;;;;;;;;;;;;;;;;;;;;;
-;;; utilities
-;;;;;;;;;;;;;;;;;;;;;;;;
-
-(defun netz-node-ids-to-graph (ids old-graph new-name)
-  "takes a list of `ids' and returns a new graph
-containing the nodes and related edges."
-  (let ((new-graph (netz-make-graph new-name)))
-    (with-graph old-graph
-		(dolist (node-id ids)
-		  (netz-add-node (netz-get-node node-id old-graph) new-graph)
-		  (dolist (edge-id (plist-get (netz-get-node node-id old-graph) :edges))
-		    (when (netz--both-edges-in-node-list ids edge-id)
-		      (netz-add-edge (netz-get-edge edge-id old-graph) new-graph)))))
-    new-graph))
-
-(defun netz-edge-ids-to-graph (ids old-graph new-name)
-    "takes a list of `ids' and returns a new graph
-containing the edges and related nodes."
-  (with-graph old-graph
-	      (let ((new-graph (netz-make-graph new-name)))
-		(dolist (edge-id ids)
-		  (netz-add-edge (netz-get-edge edge-id old-graph) new-graph)
-		  (netz-add-node (netz-get-node (car edge-id) old-graph) new-graph)
-		  (netz-add-node (netz-get-node (cadr edge-id) old-graph) new-graph))
-		new-graph)))
-
-(defun netz--both-edges-in-node-list (node-ids edge-id)
-  (and (-contains? node-ids (car edge-id)) (-contains? node-ids (cadr edge-id))))
-
-(defmacro netz-filtered-graph (filter graph new-graph)
-  "return a new graph of filtered nodes/edges
-filter example:
-(:edges (:or (:match :type \"A\")
-             (:match :type \"B\")))"
-  (let ((filter-type (car filter))
-	(filter (cadr filter)))
-    (if (equal filter-type :nodes)
-	`(netz-node-ids-to-graph
-	  (ht-keys
-	   (netz-filter-nodes ,filter ,graph))
-	  ,graph
-	  ,new-graph)
-      `(netz-edge-ids-to-graph
-	(ht-keys
-	 (netz-filter-edges ,filter ,graph))
-	,graph
-	,new-graph))))
-
-(defun netz-get-edge-property (edge-id property graph)
-  (let ((edge (netz-get-edge edge-id graph)))
-    (plist-get edge property)))
-
-;; stolen from org-mode
-(defun netz-merge-plists (&rest plists)
-  "Create a single property list from all plists in PLISTS.
-The process starts by copying the first list, and then setting properties
-from the other lists.  Settings in the last list are the most significant
-ones and overrule settings in the other lists."
-  (let ((rtn (copy-sequence (pop plists)))
-        p v ls)
-    (while plists
-      (setq ls (pop plists))
-      (while ls
-        (setq p (pop ls) v (pop ls))
-        (setq rtn (plist-put rtn p v))))
-    rtn))
-
-(defun netz-node-neighbors (node &optional directed)
-  (let ((edges (if directed
-		   (-filter (lambda (edge)
-			      (equal (car edge) (plist-get node :id)))
-			    (plist-get node :edges))
-		 (plist-get node :edges))))
-    (delete-dups (remove (plist-get node :id) (-flatten edges)))))
-
-(defun netz-filter-nodes (filters graph)
-  "returns hash table of nodes"
-  (with-graph graph
-	      (ht-select filters
-			 (netz-get-nodes graph))))
-
-(defun netz-filter-edges (filters graph)
-  "returns hash table of edges"
-  (with-edges graph
-	      (ht-select filters
-			 edges)))
-;; filtering stuff
-(defun :match (k v)
-  `(lambda (key value)
-     (equal (plist-get value ,k) ,v)))
-
-(defun :or (&rest body)
-  `(lambda (key value)
-     (member t
-	     (-map (lambda (x)
-		     (funcall x key value))
-		   ',body))))
-
-(defun :and (&rest body)
-  `(lambda (key value)
-     (-all? (lambda (x) x)
-	     (-map (lambda (x)
-		     (funcall x key value))
-		   ',body))))
-
-;; TODO this doesn't really work
-(defun :not (&rest body)
-  `(lambda (key value)
-     (-none? (lambda (x) x)
-	     (-map (lambda (x)
-		     (funcall x key value))
-		   ',body))))
-
+(defun netz-copy-graph (graph new-name &optional new-path)
+  "Copy GRAPH into a newly registered graph NEW-NAME."
+  (setq graph (netz--coerce-graph graph))
+  (let ((copy (netz-create-graph new-name :path new-path)))
+    (dolist (node (netz-get-nodes graph)) (netz-add-node copy (copy-sequence node)))
+    (dolist (edge (netz-get-edges graph)) (netz-add-edge copy (copy-sequence edge)))
+    copy))
 
 (provide 'netz)
 

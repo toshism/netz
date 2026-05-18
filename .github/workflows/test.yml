@@ -1,30 +1,34 @@
 name: test
+
 on:
-  push: {'**'}
-  pull_request: {'**'}
+  push:
+  pull_request:
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    continue-on-error: ${{ matrix.allow_failure }}
     strategy:
+      fail-fast: false
       matrix:
-        emacs_version:
-          - '25.1'
-          - '25.3'
-          - '26.1'
-          - '26.2'
-          - '26.3'
-          - '27.1'
-          - 'snapshot'
         include:
+          - emacs_version: '26.3'
+            allow_failure: false
+          - emacs_version: '27.2'
+            allow_failure: false
+          - emacs_version: '28.2'
+            allow_failure: false
+          - emacs_version: '29.4'
+            allow_failure: false
+          - emacs_version: '30.1'
+            allow_failure: false
           - emacs_version: 'snapshot'
             allow_failure: true
     steps:
-    - uses: actions/checkout@v1
-    - uses: purcell/setup-emacs@master
-      with:
-        version: ${{ matrix.emacs_version }}
-    - uses: conao3/setup-cask@master
-
-    - name: Run tests
-      run: 'cask && make test'
+      - uses: actions/checkout@v4
+      - uses: purcell/setup-emacs@master
+        with:
+          version: ${{ matrix.emacs_version }}
+      - uses: conao3/setup-cask@master
+      - name: Run tests
+        run: cask && make test
