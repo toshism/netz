@@ -1,22 +1,18 @@
-# Netz Query DSL Design Notes
+# Netz Query DSL
 
-This document sketches a possible future direction for `netz`: a Cypher-inspired graph DSL designed for Emacs Lisp.
+`netz-query` is a Cypher-inspired graph DSL for Emacs Lisp. It uses ordinary Lisp data and keyword clauses instead of ASCII-art graph syntax.
 
-The current implementation is considered a first pass. We are not committed to existing APIs, data model decisions, or the current `:match` filter implementation. The goal is to design the DSL and data model together around the experience we want.
+## Goals
 
-## North Star
-
-Cypher has a good model for graph work, but its ASCII-art syntax is not a good fit for Emacs Lisp. The goal is to keep the useful ideas:
+The DSL provides:
 
 - node patterns
-- relationship patterns
+- edge patterns
 - named bindings
 - property predicates
 - `MATCH` / `WHERE` / `RETURN`
 - path queries
 - graph mutation via `CREATE` / `MERGE` / `SET` / `DELETE`
-
-But express them as normal Lisp data using keyword clauses.
 
 Example:
 
@@ -41,13 +37,13 @@ Mutation example:
   (:merge
    (:node project :id "project:netz" :label "Project"))
   (:merge
-   (:edge person project :type "WORKS_ON"))
+   (:edge person project :id "works:tosh:netz" :type "WORKS_ON"))
   (:return person project))
 ```
 
-## Preferred Syntax Style
+## Syntax Style
 
-Use keyword clause style:
+Queries use keyword clause style:
 
 ```elisp
 (netz-query :g
@@ -58,20 +54,17 @@ Use keyword clause style:
   (:return person project))
 ```
 
-This style is preferred because it is:
+This style is:
 
 - plain Lisp data
 - easy to parse
-- macro-friendly without requiring too much syntax magic
-- close to existing `netz` plist-oriented style
-- extensible with future clauses
-- Cypher-inspired without copying Cypher syntax
+- macro-friendly
+- plist-oriented
+- extensible with additional clauses
 
 ## Query Model
 
-The main abstraction should be:
-
-> A query is a pipeline over binding rows.
+A query is a pipeline over binding rows.
 
 For example:
 
@@ -85,12 +78,10 @@ For example:
 Conceptually:
 
 1. Start with one empty row.
-2. Match `person` nodes, producing many rows.
-3. For each row, match edges from `person` to `project`.
-4. For each row, constrain `project` to `:label "Project"`.
+2. Match `person` nodes, producing rows.
+3. Match edges from `person` to `project` for each row.
+4. Constrain `project` to `:label "Project"` for each row.
 5. Return selected bindings.
-
-This is simple, powerful, and close to how Cypher feels semantically.
 
 ## Core Pattern Forms
 
@@ -106,7 +97,7 @@ Example:
 (:node n :label "Note" :title "Graph DSL")
 ```
 
-This means: bind `n` to nodes whose properties match the given plist.
+This binds `n` to nodes whose properties match the given plist.
 
 Matching by id:
 
@@ -114,7 +105,7 @@ Matching by id:
 (:node start :id "note:1")
 ```
 
-Anonymous or ignored nodes could use `_`:
+Anonymous or ignored nodes use `_`:
 
 ```elisp
 (:node _ :label "Tag")
@@ -126,7 +117,7 @@ Anonymous or ignored nodes could use `_`:
 (:edge source target &rest properties)
 ```
 
-Undirected / any-direction match:
+Any-direction match:
 
 ```elisp
 (:edge a b :type "RELATED")
@@ -138,7 +129,7 @@ Directed match:
 (:edge a b :type "LINKS_TO" :direction :out)
 ```
 
-Supported directions should likely be:
+Supported directions:
 
 ```elisp
 :direction :out
@@ -146,11 +137,17 @@ Supported directions should likely be:
 :direction :any
 ```
 
-Where `:any` may be the default for ergonomic graph exploration.
+`:any` is the default.
+
+Bind the matched edge with `:as`:
+
+```elisp
+(:edge person project :as rel :type "WORKS_ON" :direction :out)
+```
 
 ## Path Patterns
 
-Path support can come after basic node/edge matching.
+Path patterns find reachable nodes within a depth range.
 
 Example:
 
@@ -165,27 +162,71 @@ Example:
   (:return target))
 ```
 
-Potential path options:
+Supported path options:
 
 ```elisp
 :path source target
 :edge edge-property-pattern
 :direction :out | :in | :any
 :depth (min max)
+:as route-binding
+```
+
+Use `:as` to bind the full route:
+
+```elisp
+(netz-query graph
+  (:match
+   (:node start :id "person:tosh")
+   (:path start target
+    :as route
+    :direction :any
+    :depth (1 5)))
+  (:return target route))
+```
+
+A route is a plist:
+
+```elisp
+(:start <start-node>
+ :end <end-node>
+ :nodes (<ordered-node-plists>)
+ :edges (<ordered-edge-plists>)
+ :steps ((:from <node> :edge <edge> :to <node> :traversed :out) ...)
+ :length 2
+ :graph <netz-graph>)
+```
+
+Order guarantee:
+
+- `:nodes` are in traversal order
+- `:edges` are in traversal order
+- edge at index `i` connects node at index `i` to node at index `i+1`
+- `:steps` records the exact traversal, including `:traversed :out` or `:traversed :in`
+- `:graph` contains the route nodes and edges for use with graph-level APIs
+
+Checking whether two nodes are connected:
+
+```elisp
+(> (netz-query graph
+     (:match
+      (:node a :id "person:tosh")
+      (:node b :id "tag:emacs")
+      (:path a b :direction :any :depth (1 5)))
+     (:return :count))
+   0)
 ```
 
 ## Where Clause
 
-Prefer ordinary Elisp in `:where` rather than a custom predicate DSL at first.
+`:where` is ordinary Elisp evaluated with query variables lexically bound.
 
 ```elisp
 (:where
  (string-prefix-p "netz" (plist-get project :name)))
 ```
 
-This likely means `netz-query` should be a macro, so query variables can become lexical bindings within the `:where` form.
-
-A helper such as `netz-prop` could make this nicer:
+`netz-prop` provides property access:
 
 ```elisp
 (:where
@@ -200,14 +241,14 @@ Basic form:
 (:return person project)
 ```
 
-The result should probably be a list of binding plists:
+The result is a list of binding plists:
 
 ```elisp
 ((:person <node> :project <node>)
  (:person <node> :project <node>))
 ```
 
-Possible future return variants:
+Supported return variants:
 
 ```elisp
 (:return :ids person project)
@@ -218,24 +259,24 @@ Possible future return variants:
 
 ## Mutation Clauses
 
-Mutation should use the same pattern language.
+Mutation uses the same pattern language.
 
 ### Create
 
-Always creates new graph entities:
+`CREATE` creates graph entities and errors on duplicate ids:
 
 ```elisp
 (netz-query graph
   (:create
    (:node person :id "person:tosh" :label "Person" :name "Tosh")
    (:node project :id "project:netz" :label "Project")
-   (:edge person project :type "WORKS_ON"))
+   (:edge person project :id "works:tosh:netz" :type "WORKS_ON"))
   (:return person project))
 ```
 
 ### Merge
 
-Find-or-create semantics:
+`MERGE` has find-or-create semantics by `:id`:
 
 ```elisp
 (netz-query graph
@@ -247,7 +288,7 @@ Find-or-create semantics:
 
 ### Set
 
-Update properties on a bound entity:
+`SET` updates properties on a bound entity:
 
 ```elisp
 (:set person :name "Tosh" :active t)
@@ -255,7 +296,7 @@ Update properties on a bound entity:
 
 ### Delete
 
-Delete matched entities:
+`DELETE` deletes matched entities:
 
 ```elisp
 (netz-query graph
@@ -266,7 +307,7 @@ Delete matched entities:
 
 ### Detach Delete
 
-Delete a node and its relationships:
+`DETACH DELETE` deletes a node and its relationships:
 
 ```elisp
 (netz-query graph
@@ -275,15 +316,11 @@ Delete a node and its relationships:
   (:detach-delete n))
 ```
 
-## Data Model Reconsiderations
+## Data Model
 
-Since the existing implementation is not binding, we should revisit the graph internals.
+### Edges Have IDs
 
-### Edges Should Have Their Own IDs
-
-The current implementation uses `(source target)` as the edge id. This prevents multiple distinct relationships between the same two nodes unless encoded awkwardly.
-
-For Cypher-like graph work, this should be valid:
+Edges have their own ids. Multiple distinct relationships between the same two nodes are valid:
 
 ```elisp
 (:edge a b :type "LIKES")
@@ -291,7 +328,7 @@ For Cypher-like graph work, this should be valid:
 (:edge a b :type "WORKS_WITH")
 ```
 
-A better edge structure:
+Edge structure:
 
 ```elisp
 (:id edge-id
@@ -303,7 +340,7 @@ A better edge structure:
 
 ### Separate Storage From Indexes
 
-A graph could be represented as a struct:
+A graph is represented as a struct:
 
 ```elisp
 (cl-defstruct netz-graph
@@ -322,7 +359,7 @@ Where:
 - `out-index` maps source node id to edge ids
 - `in-index` maps target node id to edge ids
 
-Nodes and edges can remain plists for flexibility:
+Nodes and edges remain plists for flexibility:
 
 ```elisp
 (:id "n1" :label "Note" :title "Hello")
@@ -332,13 +369,11 @@ Nodes and edges can remain plists for flexibility:
 (:id "e1" :source "n1" :target "n2" :type "LINKS_TO")
 ```
 
-This keeps graph internals structured while preserving flexible Lisp-native entities.
+### Direction Is Explicit
 
-### Direction Should Be Explicit
+Edges are always stored as directed: `source -> target`.
 
-Edges should always be stored as directed: `source -> target`.
-
-Queries and traversals can choose direction:
+Queries and traversals choose direction:
 
 ```elisp
 :direction :out
@@ -346,74 +381,30 @@ Queries and traversals can choose direction:
 :direction :any
 ```
 
-This avoids ambiguity while still allowing ergonomic undirected exploration.
+## Implementation Summary
 
-### Replace the Current `:match` Implementation
+Implemented features:
 
-The current `(:match :type "A")` implementation is clever, but we do not need to preserve it.
-
-Instead of using keyword-named functions that return lambdas, use property patterns directly:
-
-```elisp
-(:node n :label "Person" :name "Tosh")
-(:edge n m :type "KNOWS")
-```
-
-More complex predicates can live in `:where`:
-
-```elisp
-(:where
- (> (netz-prop n :age) 30))
-```
-
-## MVP
-
-A good first implementation target:
-
-```elisp
-(netz-query graph
-  (:match
-   (:node var &rest props)
-   (:edge from to &rest props))
-  (:where elisp-form) ;; optional
-  (:return vars...))
-```
-
-Example:
-
-```elisp
-(netz-query :notes
-  (:match
-   (:node note :label "Note")
-   (:edge note tag :type "TAGGED")
-   (:node tag :label "Tag" :name "emacs"))
-  (:return note))
-```
-
-This should return all notes tagged `emacs`.
-
-## Implementation Plan
-
-Suggested layers:
-
-1. New graph core
+1. Graph core
    - `netz-create-graph`
    - `netz-add-node`
    - `netz-add-edge`
-   - `netz-node`
-   - `netz-edge`
-   - `netz-node-edges`
+   - `netz-get-node`
+   - `netz-get-edge`
+   - `netz-node-edge-ids`
 
 2. Pattern matcher
-   - evaluate `(:node var props...)`
-   - evaluate `(:edge a b props...)`
-   - produce binding rows
+   - `(:node var props...)`
+   - `(:edge a b props...)`
+   - binding rows
+   - repeated binding consistency
+   - anonymous `_` bindings
 
 3. `netz-query`
-   - parse clauses
-   - run matcher
-   - apply optional `:where`
-   - apply `:return`
+   - keyword clauses
+   - matcher execution
+   - optional `:where`
+   - return variants
 
 4. Mutation clauses
    - `:create`
@@ -423,14 +414,8 @@ Suggested layers:
    - `:detach-delete`
 
 5. Path support
-   - BFS/DFS over indexes
-   - depth-limited traversal
-
-## Open Questions
-
-- Should `:edge` default to `:direction :any` or `:direction :out`?
-- Should `netz-query` be purely a macro, or should it macro-expand into calls to runtime query functions?
-- Should result rows be plists, alists, hash tables, or structs?
-- Should node labels and edge types be strings, symbols, keywords, or unrestricted values?
-- Should schema/validation be part of the core or a later layer?
-- How much indexing should exist by default beyond in/out edge indexes?
+   - depth-limited traversal over indexes
+   - edge property constraints
+   - zero-depth paths
+   - cycle-safe traversal with no repeated edges per route
+   - full route binding via `:as`

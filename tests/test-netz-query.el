@@ -8,10 +8,22 @@
   "Return node ids for BINDING from ROWS.
 
 ROWS are plist binding rows, e.g.
-`((:person (:id "p1" ...)) (:person (:id "p2" ...)))'."
+`((:person (:id \"p1\" ...)) (:person (:id \"p2\" ...)))'."
   (mapcar (lambda (row)
             (plist-get (plist-get row binding) :id))
           rows))
+
+(defun netz-query-test--entity-ids (entities)
+  "Return :id values for plist ENTITIES."
+  (mapcar (lambda (entity) (plist-get entity :id)) entities))
+
+(defun netz-query-test--path-node-ids (path)
+  "Return ordered node ids from PATH."
+  (netz-query-test--entity-ids (plist-get path :nodes)))
+
+(defun netz-query-test--path-edge-ids (path)
+  "Return ordered edge ids from PATH."
+  (netz-query-test--entity-ids (plist-get path :edges)))
 
 (defun netz-query-test--seed-people-graph ()
   "Return a graph with people, projects, and tags for query specs."
@@ -262,6 +274,121 @@ ROWS are plist binding rows, e.g.
                   (:return target))
                 :to-equal
                 `((:target ,(netz-get-node graph "person:tosh"))))))
+
+    (it "binds full path routes with ordered nodes edges steps and graph"
+      (let* ((graph (netz-query-test--seed-people-graph))
+             (rows (netz-query graph
+                     (:match
+                      (:node start :id "person:tosh")
+                      (:path start target
+                       :as route
+                       :direction :out
+                       :depth (2 2))
+                      (:node target :id "tag:emacs"))
+                     (:return start target route)))
+             (route (plist-get (car rows) :route)))
+        (expect (length rows) :to-equal 1)
+        (expect (plist-get route :start) :to-equal (netz-get-node graph "person:tosh"))
+        (expect (plist-get route :end) :to-equal (netz-get-node graph "tag:emacs"))
+        (expect (plist-get route :length) :to-equal 2)
+        (expect (netz-query-test--path-node-ids route)
+                :to-equal '("person:tosh" "project:netz" "tag:emacs"))
+        (expect (netz-query-test--path-edge-ids route)
+                :to-equal '("works:tosh:netz" "tagged:netz:emacs"))
+        (expect (mapcar (lambda (step)
+                          (list (plist-get (plist-get step :from) :id)
+                                (plist-get (plist-get step :edge) :id)
+                                (plist-get (plist-get step :to) :id)
+                                (plist-get step :traversed)))
+                        (plist-get route :steps))
+                :to-equal '(("person:tosh" "works:tosh:netz" "project:netz" :out)
+                            ("project:netz" "tagged:netz:emacs" "tag:emacs" :out)))
+        (let ((route-graph (plist-get route :graph)))
+          (expect (netz-graph-p route-graph) :to-be-truthy)
+          (expect (mapcar (lambda (node) (plist-get node :id))
+                          (netz-get-nodes route-graph))
+                  :to-have-same-items-as '("person:tosh" "project:netz" "tag:emacs"))
+          (expect (mapcar (lambda (edge) (plist-get edge :id))
+                          (netz-get-edges route-graph))
+                  :to-have-same-items-as '("works:tosh:netz" "tagged:netz:emacs")))))
+
+    (it "records traversal direction for incoming paths"
+      (let* ((graph (netz-query-test--seed-people-graph))
+             (rows (netz-query graph
+                     (:match
+                      (:node start :id "project:netz")
+                      (:path start target
+                       :as route
+                       :direction :in
+                       :depth (1 1))
+                      (:node target :id "person:tosh"))
+                     (:return route)))
+             (route (plist-get (car rows) :route)))
+        (expect (netz-query-test--path-node-ids route)
+                :to-equal '("project:netz" "person:tosh"))
+        (expect (netz-query-test--path-edge-ids route)
+                :to-equal '("works:tosh:netz"))
+        (expect (mapcar (lambda (step)
+                          (list (plist-get (plist-get step :from) :id)
+                                (plist-get (plist-get step :edge) :id)
+                                (plist-get (plist-get step :to) :id)
+                                (plist-get step :traversed)))
+                        (plist-get route :steps))
+                :to-equal '(("project:netz" "works:tosh:netz" "person:tosh" :in)))))
+
+    (it "binds zero-depth path routes"
+      (let* ((graph (netz-query-test--seed-people-graph))
+             (rows (netz-query graph
+                     (:match
+                      (:node start :id "person:tosh")
+                      (:path start target
+                       :as route
+                       :direction :out
+                       :depth (0 0)))
+                     (:return route)))
+             (route (plist-get (car rows) :route)))
+        (expect (plist-get route :start) :to-equal (netz-get-node graph "person:tosh"))
+        (expect (plist-get route :end) :to-equal (netz-get-node graph "person:tosh"))
+        (expect (plist-get route :length) :to-equal 0)
+        (expect (netz-query-test--path-node-ids route) :to-equal '("person:tosh"))
+        (expect (plist-get route :edges) :to-equal nil)
+        (expect (plist-get route :steps) :to-equal nil)))
+
+    (it "does not repeat edges within a returned path"
+      (let* ((graph (netz-query-test--seed-people-graph)))
+        (netz-add-edge graph '(:id "cycle:netz:tosh" :source "project:netz" :target "person:tosh" :type "REFERENCES"))
+        (let* ((rows (netz-query graph
+                       (:match
+                        (:node start :id "person:tosh")
+                        (:path start target
+                         :as route
+                         :direction :out
+                         :depth (1 4)))
+                       (:return route)))
+               (routes (mapcar (lambda (row) (plist-get row :route)) rows)))
+          (dolist (route routes)
+            (let ((edge-ids (netz-query-test--path-edge-ids route)))
+              (expect edge-ids :to-equal (delete-dups (copy-sequence edge-ids))))))))
+
+    (it "binds cyclic path routes without looping"
+      (let* ((graph (netz-query-test--seed-people-graph)))
+        (netz-add-edge graph '(:id "cycle:netz:tosh" :source "project:netz" :target "person:tosh" :type "REFERENCES"))
+        (let* ((rows (netz-query graph
+                       (:match
+                        (:node start :id "person:tosh")
+                        (:path start target
+                         :as route
+                         :direction :out
+                         :depth (1 4))
+                        (:node target :id "person:tosh"))
+                       (:return route)))
+               (route (plist-get (car rows) :route)))
+          (expect (length rows) :to-equal 1)
+          (expect (plist-get route :length) :to-equal 2)
+          (expect (netz-query-test--path-node-ids route)
+                  :to-equal '("person:tosh" "project:netz" "person:tosh"))
+          (expect (netz-query-test--path-edge-ids route)
+                  :to-equal '("works:tosh:netz" "cycle:netz:tosh")))))
 
     (it "handles cycles without looping"
       (let ((graph (netz-query-test--seed-people-graph)))

@@ -60,8 +60,10 @@
         (netz-add-edge graph '(:id "e1" :source "a" :target "b" :type "LIKES"))
         (netz-add-edge graph '(:id "e2" :source "a" :target "b" :type "KNOWS"))
         (expect (netz-graph-edge-count graph) :to-equal 2)
-        (expect (plist-get (netz-get-edge graph "e1") :type) :to-equal "LIKES")
-        (expect (plist-get (netz-get-edge graph "e2") :type) :to-equal "KNOWS")))
+        (expect (netz-get-edge graph "e1")
+                :to-equal '(:id "e1" :source "a" :target "b" :type "LIKES"))
+        (expect (netz-get-edge graph "e2")
+                :to-equal '(:id "e2" :source "a" :target "b" :type "KNOWS"))))
 
     (it "maintains outgoing and incoming edge indexes"
       (let ((graph (netz-create-graph :test)))

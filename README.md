@@ -4,307 +4,446 @@
 
 Emacs generic graph store.
 
-A lot of the things I've been interested in building in emacs lately have been pretty graph-y, so I thought it would be nice to have a standard data store for them in emacs instead of having to use external data stores. It makes things a lot easier to augment with other packages, add additional functionality etc.. This is the start of an attempt at that. The data structure may be a bit unconventional for a graph, but it's working out ok so far.
+`netz` is a Lisp-native directed property graph store for Emacs. Graphs live in memory and can be persisted to disk. Nodes, edges, query rows, and paths are all ordinary plist-friendly data structures so they are easy to inspect, transform, and use from other Emacs packages.
 
-## Current Status
+## Overview
 
-Consider this alpha currently, it's very much in progress. Functions documented here should work, and should have test coverage, but things could change and there are still a lot of features I would like to add. I think most of the primitives are here though. It's a start... To get an idea of how it works take a look at the [`tests`](https://github.com/toshism/netz/blob/main/tests/test-netz.el).
+`netz` provides a directed property graph core and a Cypher-inspired query DSL. The documented behavior is covered by tests.
 
-Graphs are stored in memory and optionally backed up to disk. Convenience is preferred over space, so consider that before adding millions of nodes/edges, but even up to a million or so seems to be fine (although very little testing has been done on large graphs).
+## Data Model
 
-## Functions
+A graph is a `cl-defstruct` named `netz-graph` with separate storage and indexes:
 
-Graph can be the name of a graph or the actual graph structure itself.
+```elisp
+(cl-defstruct netz-graph
+  name
+  path
+  nodes
+  edges
+  out-index
+  in-index)
+```
+
+Nodes are property lists with a required `:id`:
+
+```elisp
+(:id "person:tosh" :label "Person" :name "Tosh")
+```
+
+Edges are directed property lists with required `:id`, `:source`, and `:target`:
+
+```elisp
+(:id "works:tosh:netz"
+ :source "person:tosh"
+ :target "project:netz"
+ :type "WORKS_ON")
+```
+
+Edges have their own IDs, so multiple distinct relationships between the same nodes are supported:
+
+```elisp
+(:id "e1" :source "a" :target "b" :type "LIKES")
+(:id "e2" :source "a" :target "b" :type "KNOWS")
+```
+
+Indexes are maintained automatically:
+
+- `out-index`: source node id -> outgoing edge ids
+- `in-index`: target node id -> incoming edge ids
+
+## Quick Start
+
+```elisp
+(require 'netz)
+(require 'netz-query)
+
+(setq graph (netz-create-graph :example))
+
+(netz-add-node graph '(:id "person:tosh" :label "Person" :name "Tosh"))
+(netz-add-node graph '(:id "project:netz" :label "Project" :name "netz" :stars 12))
+(netz-add-edge graph '(:id "works:tosh:netz"
+                       :source "person:tosh"
+                       :target "project:netz"
+                       :type "WORKS_ON"))
+
+(netz-query graph
+  (:match
+   (:node person :label "Person")
+   (:edge person project :type "WORKS_ON" :direction :out)
+   (:node project :label "Project"))
+  (:where
+   (> (netz-prop project :stars) 10))
+  (:return person project))
+```
+
+Returns plist binding rows:
+
+```elisp
+((:person (:id "person:tosh" ...)
+  :project (:id "project:netz" ...)))
+```
+
+## Core API
+
+Graph arguments can generally be graph objects or registered graph names.
 
 ### Graphs
 
-* [`netz-make-graph`](#netz-make-graph-name-optional-path-save) `(name &optional path save)`
-* [`netz-save-graph`](#netz-save-graph-graph) `(graph)`
-* [`netz-load-graph`](#netz-load-graph-path) `(path)`
-* [`netz-reload-graph`](#netz-reload-graph-graph) `(graph)`
-* [`netz-get-graph`](#netz-get-graph-name) `(name)`
-* [`netz-copy-graph`](#netz-copy-graph-graph-new-name-optional-new-path) `(graph new-name &optional new-path)`
-* [`netz-filtered-graph`](#netz-filtered-graph-filter-graph-new-graph) `(filter graph new-graph)`
+#### `netz-create-graph` `(name &key path save)`
+
+Create and register an empty graph.
+
+```elisp
+(netz-create-graph :notes)
+(netz-create-graph :notes :path "/tmp/notes.graph" :save t)
+```
+
+`netz-make-graph` is an alias for `netz-create-graph`.
+
+#### `netz-get-graph` `(name)`
+
+Return a registered graph by name.
+
+```elisp
+(netz-get-graph :notes)
+```
+
+#### `netz-save-graph` `(graph)`
+
+Save a graph to its path.
+
+```elisp
+(netz-save-graph graph)
+(netz-save-graph :notes)
+```
+
+#### `netz-load-graph` `(path)`
+
+Load and register a graph from disk. Indexes are rebuilt on load.
+
+```elisp
+(netz-load-graph "/tmp/notes.graph")
+```
+
+#### `netz-reload-graph` `(graph)`
+
+Reload a graph from its path.
+
+#### `netz-copy-graph` `(graph new-name &optional new-path)`
+
+Copy nodes and edges into a registered graph named `new-name`.
 
 ### Nodes
 
-* [`netz-add-node`](#netz-add-node-node-graph) `(node graph)`
-* [`netz-get-node`](#netz-get-node-node-id-graph) `(node-id graph)`
-* [`netz-get-nodes`](#netz-get-nodes-graph) `(graph)`
-* [`netz-delete-node`](#netz-delete-node-node-graph) `(node graph)`
+#### `netz-add-node` `(graph node)`
+
+Add a node plist. Existing nodes are merged, with incoming properties winning.
+
+```elisp
+(netz-add-node graph '(:id "note:1" :label "Note" :title "Hello"))
+```
+
+#### `netz-get-node` `(graph node-id)`
+
+```elisp
+(netz-get-node graph "note:1")
+```
+
+#### `netz-get-nodes` `(graph)`
+
+Return a list of all node plists.
+
+#### `netz-delete-node` `(graph node-or-id &key detach)`
+
+Delete a node. Nodes with incident edges require `:detach t`.
+
+```elisp
+(netz-delete-node graph "note:1" :detach t)
+```
 
 ### Edges
 
-* [`netz-add-edge`](#netz-add-edge-edge-graph) `(edge graph)`
-* [`netz-get-edge`](#netz-get-edge-edge-id-graph) `(edge-id graph)`
-* [`netz-get-edges`](#netz-get-edges-graph) `(graph)`
-* [`netz-delete-edge`](#netz-delete-edge-edge-graph) `(edge graph)`
+#### `netz-add-edge` `(graph edge)`
 
-### Relationships
+Add a directed edge plist.
 
-* [`netz-connect-nodes`](#netz-connect-nodes-source-target-edge-params-graph) `(source target edge-params graph)` -- probably just make this netz-add-edge?
-* [`netz-get-node-hood`](#netz-get-node-hood-id-graph-optional-new-graph-edge-filter-directed) `(id graph &optional new-graph edge-filter directed)`
-* [`netz-bfs-shortest-path`](#netz-bfs-shortest-path-source-target-graph-optional-directed) `(source target graph &optional directed)`
-* [`netz-get-related-by`](#netz-get-related-by-node-graph-key-by-new-name-directed) `(node graph &key by new-name directed)`
-
-### Filtering
-
-- [`:match`](#match-property-value) `(property value)`
-- [`:and`](#and-match-) `(:match ...)`
-- [`:or`](#or-match-) `(:match ..)`
-
-## Graphs
-
-Functions for dealing with a graph object.
-
-### netz-make-graph `(name &optional path save)`
-
-Create and return a new graph with `name`. Optionally provide a system `path` of the location for the save file. If `save` is non-nil the graph will be immediately written to the file `path`.
-
-Default `path` is `(user-emacs-directory)/.netz-graph/(name)`.
-
-Create graph named `:test` in memory. Graphs can be named with keywords.
-``` emacs-lisp
-(netz-make-graph :test)
+```elisp
+(netz-add-edge graph '(:id "e1" :source "a" :target "b" :type "LINKS_TO"))
 ```
 
-Create graph named `test` and save it to provided path. Graphs can be named with strings.
-``` emacs-lisp
-(netz-make-graph "test" "/home/toshism/graphs/test-graph" t)
+#### `netz-get-edge` `(graph edge-id)`
+
+```elisp
+(netz-get-edge graph "e1")
 ```
 
-### netz-save-graph `(graph)`
+#### `netz-get-edges` `(graph)`
 
-Save `graph` to disk. `graph` can be the name or the full graph structure.
+Return a list of all edge plists.
 
-Save `graph` named `:test`
-``` emacs-lisp
-(netz-save-graph :test)
+#### `netz-delete-edge` `(graph edge-or-id)`
+
+```elisp
+(netz-delete-edge graph "e1")
 ```
 
-Save provided `graph`.
+#### `netz-node-edge-ids` `(graph node-id &key direction)`
 
-``` emacs-lisp
-(setq test-graph (make-graph :test))
-(netz-save-graph test-graph)
+Return edge ids for a node. Direction is one of `:out`, `:in`, or `:any`.
+
+```elisp
+(netz-node-edge-ids graph "a" :direction :out)
 ```
 
-### netz-load-graph `(path)`
+## Query DSL
 
-Load graph from provided file `path`.
+`netz-query` is a macro over binding rows. A query usually contains `:match`, optional `:where`, and `:return` clauses.
 
-``` emacs-lisp
-(netz-load-graph "/home/toshism/.emacs.d/.netz-graph/test")
+```elisp
+(netz-query graph
+  (:match
+   (:node person :label "Person")
+   (:edge person project :type "WORKS_ON" :direction :out)
+   (:node project :label "Project"))
+  (:return person project))
 ```
 
-``` emacs-lisp
-(setq test-graph (make-graph :test))
-(netz-load-graph (plist-get test-graph :path))
+You can also query by registered graph name:
+
+```elisp
+(netz-query :notes
+  (:match (:node note :label "Note"))
+  (:return note))
 ```
 
-### netz-reload-graph `(graph)`
+### Node Patterns
 
-Reload and return `graph` from disk.
-
-``` emacs-lisp
-(netz-reload-graph :test)
+```elisp
+(:node binding &rest properties)
 ```
 
-### netz-get-graph `(name)`
+Examples:
 
-Return graph with `name`.
-
-``` emacs-lisp
-(netz-get-graph :test)
+```elisp
+(:node note :label "Note")
+(:node start :id "note:1")
+(:node _ :label "Tag") ; anonymous binding
 ```
 
-### netz-copy-graph `(graph new-name &optional new-path)`
+Repeated bindings are constrained to the same entity.
 
-Create and return new `graph` named `new-name` with optional `new-path`.
+### Edge Patterns
 
-``` emacs-lisp
-(netz-copy-graph :test :new-test)
+```elisp
+(:edge source target &rest properties)
 ```
 
-### netz-filtered-graph `(filter graph new-graph)`
+By default edges match in any direction. Use `:direction` for explicit traversal:
 
-Create and return a `graph` with name `new-graph` filtered by `filter`.
-
-``` emacs-lisp
-(netz-filtered-graph (:edges (:or (:match :type "LINKS_TO")
-                                  (:match :type "TAGGED")))
-                     :test :linked-graph)
-```
-Filters can be for either `:edges` or `:nodes` but currently only one or the other.
-
-## Nodes
-
-Nodes are a plist with a single mandatory unique property named `:id`.
-Example:
-`'(:id 1 :label "Tag" :name "emacs")`
-
-Nodes also store a record of connected edges in the `:edges` property. This is automatically maintained by netz when relationships are managed through the provided functions.
-
-### netz-add-node `(node graph)`
-
-Add `node` to `graph`. If node already exists it will be merged with the existing node. New values take precedence. See `netz-merge-plists` for details. Returns the updated `graph`.
-
-Add a node with `:id` of 1 and a `:label` of "Note" to `:test` graph.
-``` emacs-lisp
-(netz-add-node '(:id 1 :label "Note") :test)
+```elisp
+(:edge a b :type "LINKS_TO")                 ; any direction
+(:edge a b :type "LINKS_TO" :direction :out)
+(:edge a b :type "LINKS_TO" :direction :in)
 ```
 
-If we then call
+Bind the matched edge with `:as`:
 
-``` emacs-lisp
-(netz-add-node '(:id 1 :label "Tag" :name "test") :test)
-```
-Node with id 1 will be equal to `(:id 1 :label "Tag" :name "test")`
-
-### netz-get-node `(node-id graph)`
-
-Return node with `node-id` from `graph`.
-
-``` emacs-lisp
-(netz-get-node 1 :test)
+```elisp
+(:edge person project :as rel :type "WORKS_ON" :direction :out)
 ```
 
-### netz-get-nodes `(graph)`
+### Where Clause
 
-Return a hash table of all nodes from `graph` with node `:id`s as the keys.
+`:where` is ordinary Elisp evaluated with query variables lexically bound.
 
-``` emacs-lisp
-(netz-get-nodes :test)
+```elisp
+(netz-query graph
+  (:match (:node project :label "Project"))
+  (:where (> (netz-prop project :stars) 10))
+  (:return project))
 ```
 
-### netz-delete-node `(node graph)`
+### Return Clause
 
-Delete `node` from `graph`.
+Binding rows:
 
-``` emacs-lisp
-(netz-delete-node '(:id 1) :test)
+```elisp
+(:return person project)
+;; => ((:person <node> :project <node>) ...)
 ```
 
-## Edges
+Count:
 
-Edges are a plist with a single mandatory unique proprty named `:id` which is a list of node ids. `:id` is a list of source and target ids.
-Example:
-`'(:id (1 2) :type "TAGGED")`
-
-### netz-add-edge `(edge graph)`
-
-Add `edge` to `graph`.
-
-``` emacs-lisp
-(netz-add-edge '(:id (1 2) :type "TAGGED") :test)
+```elisp
+(:return :count)
 ```
 
-### netz-get-edge `(edge-id graph)`
+IDs:
 
-Get edge with `edge-id` from `graph`.
-
-``` emacs-lisp
-(netz-get-edge '(1 2) :test)
+```elisp
+(:return :ids person project)
 ```
 
-### netz-get-edges `(graph)`
+Pluck a property:
 
-Return a hash table of all edges from `graph` with edge `:id`s as the keys.
-
-``` emacs-lisp
-(netz-get-edges :test)
+```elisp
+(:return :pluck person :name)
 ```
 
-### netz-delete-edge `(edge graph)`
+Return a graph containing matched row entities:
 
-Delete `edge` from `graph`.
-
-``` emacs-lisp
-(netz-delete-edge '(:id (1 2) :type "TAGGED") :test)
+```elisp
+(:return :graph :new-graph-name)
 ```
 
-## Relationships
+## Path Queries
 
-### netz-connect-nodes `(source target edge-params graph)`
+Path queries find reachable nodes within a depth range.
 
-Connect `source` to `target` with edge having `edge-params` in `graph`.
-
-``` emacs-lisp
-(setq one (netz-get-node 1 :test)
-(setq two (netz-get-node 2 :test)
-(netz-connect-nodes one two '(:type "LINKS_TO") :test)
+```elisp
+(netz-query graph
+  (:match
+   (:node start :id "person:tosh")
+   (:path start target
+    :direction :out
+    :depth (1 3)))
+  (:return target))
 ```
 
-### netz-get-node-hood `(id graph &optional new-graph edge-filter directed)`
+Options:
 
-Get the neighborhood for node with `id` in `graph`.
-*optional*
-If `new-graph` is nil modify graph in place, if it is non-nil return a new graph named `new-graph`.
-`edge-filter` limits the neighborhood by properties of the edges.
-`directed` is a boolean value to specify if the neighborhood should consider edge direction in a directed graph.
-
-``` emacs-lisp
-(netz-get-node-hood 1 :test)
+```elisp
+:path source target
+:edge (:type "LINKS_TO")
+:direction :out | :in | :any
+:depth (min max)
+:as route
 ```
 
-Return a new graph named "hood" for node id 1 and connected nodes through a "RELATED" property.
+### Full Route Binding
 
-``` emacs-lisp
-(netz-get-node-hood 1 :test :hood (:match :type "RELATED"))
-```
-See [`filtering`](#filtering-1) for more details on filtering syntax.
+Use `:as` to bind the full path route:
 
-### netz-bfs-shortest-path `(source target graph &optional directed)`
-
-Return the shortest path, as a list of node ids, between `source` and `target` in `graph`.
-*optional*
-If `directed` is nil ignore direction.
-
-``` emacs-lisp
-(setq start (netz-get-node 1 :test))
-(setq end (netz-get-node 2 :test))
-(netz-bfs-shortest-path start end :test)
+```elisp
+(netz-query graph
+  (:match
+   (:node start :id "person:tosh")
+   (:path start target
+    :as route
+    :direction :out
+    :depth (1 3))
+   (:node target :label "Tag"))
+  (:return target route))
 ```
 
-### netz-get-related-by `(node graph &key by new-name directed)`
+A route is a plist:
 
-Return a graph named `new-name` that contains nodes related to `node` with edges properties `by` in `graph`, optionally `directed`.
-
-Sounds confusing but it's similar to neighborhood.
-
-``` emacs-lisp
-(netz-get-related-by (netz-get-node 1 :test) :test (:match :type "LINKS_TO") :links-to t)
+```elisp
+(:start <start-node>
+ :end <end-node>
+ :nodes (<ordered-node-plists>)
+ :edges (<ordered-edge-plists>)
+ :steps ((:from <node> :edge <edge> :to <node> :traversed :out) ...)
+ :length 2
+ :graph <netz-graph>)
 ```
 
-## Filtering
+Order guarantee:
 
-Filtering functions are used as arguments for any functions that accept filter parameters. They can be combined and nested.
+- `:nodes` are in traversal order
+- `:edges` are in traversal order
+- edge at index `i` connects node at index `i` to node at index `i+1`
+- `:steps` records the exact traversal, including whether an edge was traversed `:out` or `:in`
 
-See [`netz-filtered-graph`](#netz-filtered-graph-filter-graph-new-graph) for an example.
+The embedded `:graph` contains the route's nodes and edges so existing graph tools can operate on the path as a graph.
 
-### :match `(property value)`
+### Checking Whether Two Nodes Are Connected
 
-`:match` is used to select a node or edge by the `value` of a `property`. Equality is checked with `equal`.
-
-The following will match a node or edge with the `:label` value of `Note`.
-``` emacs-lisp
-(:match :label "Note")
+```elisp
+(netz-query graph
+  (:match
+   (:node a :id "person:tosh")
+   (:node b :id "tag:emacs")
+   (:path a b :as route :direction :any :depth (1 5)))
+  (:return route))
 ```
 
-### :and `(:match ...)`
+Returns route rows if connected, or `nil` if no path exists.
 
-`:and` can be used to combine `:match` statements with logical and.
+For yes/no:
 
-``` emacs-lisp
-(:and (:match :label "Note")
-      (:match :type "A"))
+```elisp
+(> (netz-query graph
+     (:match
+      (:node a :id "person:tosh")
+      (:node b :id "tag:emacs")
+      (:path a b :direction :any :depth (1 5)))
+     (:return :count))
+   0)
 ```
 
-### :or `(:match ...)`
+## Mutations
 
-`:or` can be used to combine `:match` statements with logical or.
+Mutation clauses use the same pattern language.
 
-``` emacs-lisp
-(:or (:match :label "Note")
-     (:match :type "A"))
+### Create
+
+Creates entities and errors on duplicate ids.
+
+```elisp
+(netz-query graph
+  (:create
+   (:node person :id "person:tosh" :label "Person" :name "Tosh")
+   (:node project :id "project:netz" :label "Project" :name "netz")
+   (:edge person project :id "works:tosh:netz" :type "WORKS_ON"))
+  (:return person project))
 ```
+
+### Merge
+
+Find-or-create by `:id`.
+
+```elisp
+(netz-query graph
+  (:merge
+   (:node person :id "person:tosh" :label "Person"))
+  (:set person :name "Tosh" :active t)
+  (:return person))
+```
+
+### Set
+
+Update properties on a bound node or edge.
+
+```elisp
+(:set person :name "Tosh" :active t)
+(:set rel :since 2026)
+```
+
+### Delete
+
+Delete matched entities.
+
+```elisp
+(netz-query graph
+  (:match (:node tmp :label "Temp"))
+  (:delete tmp))
+```
+
+### Detach Delete
+
+Delete matched nodes and their incident edges.
+
+```elisp
+(netz-query graph
+  (:match (:node note :id "note:1"))
+  (:detach-delete note))
+```
+
+## Operational Characteristics
+
+- Queries scan nodes/edges for property matching beyond id/index lookups.
+- Path queries return every route found within the depth range and can grow quickly on dense graphs.
+- Mutation queries mutate directly.
+
+See `docs/query-dsl.md` for the query DSL reference.
