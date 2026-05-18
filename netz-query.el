@@ -250,8 +250,8 @@
     (:any (if (equal (plist-get edge :source) node-id) :out :in))))
 
 (defun netz-query--path-graph (nodes edges)
-  "Return a graph containing path NODES and EDGES."
-  (let ((path-graph (netz-create-graph (gensym "path"))))
+  "Return an unregistered graph containing path NODES and EDGES."
+  (let ((path-graph (netz--make-graph (gensym "path"))))
     (dolist (node nodes)
       (netz-add-node path-graph node))
     (dolist (edge edges)

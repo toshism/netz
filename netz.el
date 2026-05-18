@@ -44,14 +44,18 @@
              (error "Graph not found: %S" graph)))
         (t (error "Invalid graph: %S" graph))))
 
+(cl-defun netz--make-graph (name &key path)
+  "Create an empty graph named NAME without registering it."
+  (make-netz-graph :name name
+                   :path (netz-get-path name path)
+                   :nodes (ht-create 'equal)
+                   :edges (ht-create 'equal)
+                   :out-index (ht-create 'equal)
+                   :in-index (ht-create 'equal)))
+
 (cl-defun netz-create-graph (name &key path save)
   "Create and register an empty graph named NAME."
-  (let ((graph (make-netz-graph :name name
-                                :path (netz-get-path name path)
-                                :nodes (ht-create 'equal)
-                                :edges (ht-create 'equal)
-                                :out-index (ht-create 'equal)
-                                :in-index (ht-create 'equal))))
+  (let ((graph (netz--make-graph name :path path)))
     (ht-set! *netz-graphs* name graph)
     (when save (netz-save-graph graph))
     graph))

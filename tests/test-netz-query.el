@@ -305,6 +305,7 @@ ROWS are plist binding rows, e.g.
                             ("project:netz" "tagged:netz:emacs" "tag:emacs" :out)))
         (let ((route-graph (plist-get route :graph)))
           (expect (netz-graph-p route-graph) :to-be-truthy)
+          (expect (netz-get-graph (netz-graph-name route-graph)) :to-be nil)
           (expect (mapcar (lambda (node) (plist-get node :id))
                           (netz-get-nodes route-graph))
                   :to-have-same-items-as '("person:tosh" "project:netz" "tag:emacs"))
